@@ -2,22 +2,18 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Wallet } from "ethers";
 import { encodeFunctionData, formatEther, formatUnits } from "viem";
 import { createClient } from "@/lib/supabase/client";
 import { publicClient, usdtAbi, USDT_ADDRESS, explorerTx } from "@/lib/chain";
-import { hasVault, saveSeed, loadSeed, clearVault } from "@/lib/wdk/vault";
-import { openWdkAccount } from "@/lib/wdk/wallet";
+import { useWallet } from "@/components/wallet-context";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
-type Opened = Awaited<ReturnType<typeof openWdkAccount>>;
-
 export function WdkWalletPanel({ savedAddress }: { savedAddress: string | null }) {
     const router = useRouter();
-    const [wallet, setWallet] = useState<Opened | null>(null);
+    const w = useWallet();
     const [pin, setPin] = useState("");
     const [backup, setBackup] = useState<string | null>(null);
     const [eth, setEth] = useState<string | null>(null);
@@ -25,13 +21,6 @@ export function WdkWalletPanel({ savedAddress }: { savedAddress: string | null }
     const [busy, setBusy] = useState(false);
     const [msg, setMsg] = useState<string | null>(null);
     const [err, setErr] = useState<string | null>(null);
-
-    // null = still checking this browser's storage
-    const [vaultExists, setVaultExists] = useState<boolean | null>(null);
-
-    useEffect(() => {
-        setVaultExists(hasVault()); // runs only in the browser, after first render
-    }, []);
 
     async function refresh(address: `0x${string}`) {
         const [ethBal, usdtBal] = await Promise.all([
@@ -47,6 +36,10 @@ export function WdkWalletPanel({ savedAddress }: { savedAddress: string | null }
         setUsdt(formatUnits(usdtBal, 6));
     }
 
+    useEffect(() => {
+        if (w.address) refresh(w.address).catch(() => { });
+    }, [w.address]);
+
     async function run(fn: () => Promise<void>) {
         setBusy(true);
         setErr(null);
@@ -59,46 +52,35 @@ export function WdkWalletPanel({ savedAddress }: { savedAddress: string | null }
         setBusy(false);
     }
 
-    const createWallet = () =>
+    const create = () =>
         run(async () => {
-            if (pin.length < 6) throw new Error("Choose a PIN of at least 6 characters.");
-            const seed = Wallet.createRandom().mnemonic!.phrase;
-            await saveSeed(seed, pin);
-            setVaultExists(true);
-            const opened = await openWdkAccount(seed);
-            setWallet(opened);
-            setBackup(seed);
-            await refresh(opened.address);
+            setBackup(await w.createWallet(pin));
+            setPin("");
         });
 
     const unlock = () =>
         run(async () => {
-            const seed = await loadSeed(pin);
-            const opened = await openWdkAccount(seed);
-            setWallet(opened);
-            await refresh(opened.address);
+            await w.unlock(pin);
+            setPin("");
         });
 
     const claimFaucet = () =>
         run(async () => {
-            if (!wallet) return;
             const data = encodeFunctionData({ abi: usdtAbi, functionName: "faucetMint" });
-            const tx = await wallet.account.sendTransaction({ to: USDT_ADDRESS, value: 0n, data });
-            setMsg(`Sent: ${explorerTx(tx.hash)}`);
-            await publicClient.waitForTransactionReceipt({ hash: tx.hash as `0x${string}` });
-            await refresh(wallet.address);
-            setMsg("Claimed 100 test USDT.");
+            const hash = await w.sendTx(USDT_ADDRESS, data);
+            setMsg(`Claimed 100 test USDT: ${explorerTx(hash)}`);
+            if (w.address) await refresh(w.address);
         });
 
     const saveToProfile = () =>
         run(async () => {
-            if (!wallet) return;
+            if (!w.address) return;
             const supabase = createClient();
             const { data: auth } = await supabase.auth.getUser();
             if (!auth.user) throw new Error("Please log in again.");
             const { error } = await supabase
                 .from("profiles")
-                .update({ wallet_address: wallet.address.toLowerCase(), wallet_type: "wdk" })
+                .update({ wallet_address: w.address.toLowerCase(), wallet_type: "wdk" })
                 .eq("id", auth.user.id);
             if (error) throw new Error(error.message);
             setMsg("Wallet linked to your account.");
@@ -107,11 +89,8 @@ export function WdkWalletPanel({ savedAddress }: { savedAddress: string | null }
 
     function reset() {
         if (confirm("Remove the wallet from this device? You'll need your recovery phrase to restore it.")) {
-            clearVault();
-            setVaultExists(false);
-            setWallet(null);
+            w.removeFromDevice();
             setBackup(null);
-            setPin("");
             router.refresh();
         }
     }
@@ -126,19 +105,19 @@ export function WdkWalletPanel({ savedAddress }: { savedAddress: string | null }
                     Self-custodial wallet created on this device. Test network only — DEMO, NO REAL MONEY.
                 </p>
 
-                {!wallet && vaultExists === null && <p>Loading wallet…</p>}
+                {w.status === "checking" && <p>Loading wallet…</p>}
 
-                {!wallet && vaultExists === false && (
+                {w.status === "none" && (
                     <div className="space-y-2">
                         <Label htmlFor="pin">Choose a wallet PIN</Label>
                         <Input id="pin" type="password" value={pin} onChange={(e) => setPin(e.target.value)} />
-                        <Button onClick={createWallet} disabled={busy}>
+                        <Button onClick={create} disabled={busy}>
                             {busy ? "Creating…" : "Create wallet"}
                         </Button>
                     </div>
                 )}
 
-                {!wallet && vaultExists === true && (
+                {w.status === "locked" && (
                     <div className="space-y-2">
                         <Label htmlFor="pin">Wallet PIN</Label>
                         <Input id="pin" type="password" value={pin} onChange={(e) => setPin(e.target.value)} />
@@ -163,24 +142,27 @@ export function WdkWalletPanel({ savedAddress }: { savedAddress: string | null }
                     </div>
                 )}
 
-                {wallet && (
+                {w.status === "unlocked" && w.address && (
                     <div className="space-y-3">
                         <p className="break-all">
-                            Address: <span className="font-mono">{wallet.address}</span>
+                            Address: <span className="font-mono">{w.address}</span>
                         </p>
                         <p>Test ETH (for network fees): {eth ?? "…"}</p>
                         <p>Test USDT: {usdt ?? "…"}</p>
                         <div className="flex flex-wrap gap-2">
-                            <Button onClick={() => run(() => refresh(wallet.address))} variant="outline" disabled={busy}>
+                            <Button variant="outline" disabled={busy} onClick={() => run(() => refresh(w.address!))}>
                                 Refresh
                             </Button>
                             <Button onClick={claimFaucet} disabled={busy}>
                                 Claim 100 test USDT
                             </Button>
                             <Button onClick={saveToProfile} disabled={busy}>
-                                {savedAddress?.toLowerCase() === wallet.address.toLowerCase()
+                                {savedAddress?.toLowerCase() === w.address.toLowerCase()
                                     ? "Linked ✓"
                                     : "Link wallet to my account"}
+                            </Button>
+                            <Button variant="outline" onClick={w.lock}>
+                                Lock
                             </Button>
                         </div>
                     </div>

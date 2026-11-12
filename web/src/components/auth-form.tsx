@@ -9,13 +9,17 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
-export function AuthForm({ mode }: { mode: "login" | "signup" }) {
+export function AuthForm({ mode, next }: { mode: "login" | "signup"; next?: string }) {
     const router = useRouter();
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
     const [error, setError] = useState<string | null>(null);
     const [notice, setNotice] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
+
+    // Only allow same-site relative paths
+    const dest = next && next.startsWith("/") && !next.startsWith("//") ? next : "/dashboard";
+    const suffix = next ? `?next=${encodeURIComponent(next)}` : "";
 
     async function handleSubmit(e: React.FormEvent) {
         e.preventDefault();
@@ -35,7 +39,7 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
             if (error) {
                 setError(error.message);
             } else if (data.session) {
-                router.push("/dashboard");
+                router.push(dest);
                 router.refresh();
             } else {
                 setNotice("Check your email to confirm your account, then log in.");
@@ -45,7 +49,7 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
             if (error) {
                 setError(error.message);
             } else {
-                router.push("/dashboard");
+                router.push(dest);
                 router.refresh();
             }
         }
@@ -90,11 +94,17 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
                 <p className="mt-4 text-sm text-muted-foreground">
                     {mode === "login" ? (
                         <>
-                            New here? <Link href="/signup" className="underline">Create an account</Link>
+                            New here?{" "}
+                            <Link href={`/signup${suffix}`} className="underline">
+                                Create an account
+                            </Link>
                         </>
                     ) : (
                         <>
-                            Already have an account? <Link href="/login" className="underline">Log in</Link>
+                            Already have an account?{" "}
+                            <Link href={`/login${suffix}`} className="underline">
+                                Log in
+                            </Link>
                         </>
                     )}
                 </p>
