@@ -5,6 +5,10 @@ import { createClient } from "@/lib/supabase/server";
 import { SignOutButton } from "@/components/sign-out-button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { WdkWalletPanel } from "@/components/wdk-wallet-panel";
+import Link from "next/link";
+import { buttonVariants } from "@/components/ui/button";
+//import { WdkWalletPanelLoader } from "@/components/wdk-wallet-panel-loader";
+
 import { WdkWalletPanelLoader } from "@/components/wdk-wallet-panel-loader";
 
 async function DashboardContent() {
@@ -42,7 +46,10 @@ async function DashboardContent() {
                     {profile?.is_admin && <p className="font-medium">Administrator</p>}
                 </CardContent>
             </Card>
-            <WdkWalletPanel savedAddress={profile?.wallet_address ?? null} />
+            <Link href="/trades/new" className={buttonVariants()}>
+                Create a transaction
+            </Link>
+            <WdkWalletPanelLoader savedAddress={profile?.wallet_address ?? null} />
         </div>
     );
 }
