@@ -52,6 +52,11 @@ async function DashboardContent() {
             <Link href="/trades/new" className={buttonVariants()}>
                 Create a transaction
             </Link>
+            {profile?.is_admin && (
+                <Link href="/admin" className={buttonVariants({ variant: "outline" })}>
+                    Admin: review disputes
+                </Link>
+            )}
 
             <WdkWalletPanelLoader savedAddress={profile?.wallet_address ?? null} />
 

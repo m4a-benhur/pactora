@@ -45,3 +45,27 @@ export function inspectionLabel(minutes: number) {
 export function utcStamp(iso: string) {
     return new Date(iso).toISOString().replace("T", " ").slice(0, 16) + " UTC";
 }
+
+export const OUTCOME_LABEL: Record<string, string> = {
+    full_refund: "Full refund to the buyer",
+    partial_refund: "Partial refund to the buyer",
+    release_to_seller: "Payment released to the seller",
+    release_buyer_bond_forfeited: "Released to the seller; buyer bond forfeited for deliberate misconduct",
+    seller_bond_to_buyer: "Refund to the buyer; seller bond awarded to the buyer for deliberate misconduct",
+};
+
+export type SellerStats = {
+    completed: number;
+    rating_count: number;
+    rating_avg: number;
+    tier: string;
+};
+
+export function reputationLine(s: SellerStats | null) {
+    if (!s) return "";
+    const rating =
+        s.rating_count > 0
+            ? `★ ${Number(s.rating_avg).toFixed(1)} (${s.rating_count} rating${s.rating_count === 1 ? "" : "s"})`
+            : "No ratings yet";
+    return `${s.tier} seller · ${rating} · ${s.completed} completed sale${s.completed === 1 ? "" : "s"}`;
+}

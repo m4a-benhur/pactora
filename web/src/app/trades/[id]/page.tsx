@@ -7,16 +7,21 @@ import { syncTradeFromChain } from "@/lib/sync";
 import { CopyLink } from "@/components/copy-link";
 import { PhotoUploader } from "@/components/photo-uploader";
 import { TradeActions } from "@/components/trade-actions";
+import { DisputeSection, type EvidenceItem } from "@/components/dispute-section";
+import { RateSeller } from "@/components/rate-seller";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { computeBreakdown, formatZar, unitsToZarCents } from "@/lib/pricing";
 import {
     COURIER_STEP_ORDER,
     DELIVERY_LABEL,
+    OUTCOME_LABEL,
     STATUS_LABEL,
     inspectionLabel,
     photoUrl,
+    reputationLine,
     utcStamp,
+    type SellerStats,
 } from "@/lib/trade-ui";
 import { explorerTx } from "@/lib/chain";
 
@@ -35,7 +40,6 @@ async function TradeContent({ params }: { params: Promise<{ id: string }> }) {
     const { data: first } = await supabase.from("trades").select("*").eq("id", id).single();
     if (!first) notFound();
 
-    // Keep our records in step with the chain whenever the page is viewed.
     if (first.buyer_id && SYNCABLE.includes(first.status)) {
         try {
             await syncTradeFromChain(id);
@@ -47,37 +51,60 @@ async function TradeContent({ params }: { params: Promise<{ id: string }> }) {
     if (!trade) notFound();
 
     const partyIds = [trade.seller_id, trade.buyer_id].filter(Boolean) as string[];
-    const [{ data: parties }, { data: media }, { data: deliveries }, { data: events }] =
-        await Promise.all([
-            supabase.from("profiles").select("id, display_name, wallet_address").in("id", partyIds),
-            supabase
-                .from("trade_media")
-                .select("storage_path")
-                .eq("trade_id", id)
-                .eq("kind", "item_photo")
-                .order("created_at"),
-            supabase
-                .from("delivery_events")
-                .select("status, is_simulated, note, created_at")
-                .eq("trade_id", id)
-                .order("created_at"),
-            supabase
-                .from("chain_events")
-                .select("event_name, tx_hash, data, created_at")
-                .eq("trade_id", id)
-                .order("created_at"),
-        ]);
+    const [
+        { data: parties },
+        { data: media },
+        { data: deliveries },
+        { data: events },
+        { data: dispute },
+        { data: rating },
+        { data: stats },
+    ] = await Promise.all([
+        supabase.from("profiles").select("id, display_name, wallet_address").in("id", partyIds),
+        supabase.from("trade_media").select("id, kind, storage_path, note, uploaded_by").eq("trade_id", id).order("created_at"),
+        supabase
+            .from("delivery_events")
+            .select("status, is_simulated, note, created_at")
+            .eq("trade_id", id)
+            .order("created_at"),
+        supabase
+            .from("chain_events")
+            .select("event_name, tx_hash, data, created_at")
+            .eq("trade_id", id)
+            .order("created_at"),
+        supabase
+            .from("disputes")
+            .select("reason, seller_response, status, outcome, admin_notes, opened_by")
+            .eq("trade_id", id)
+            .maybeSingle(),
+        supabase.from("seller_ratings").select("rating, comment").eq("trade_id", id).maybeSingle(),
+        supabase.rpc("seller_stats", { p_seller: trade.seller_id }),
+    ]);
 
     const seller = parties?.find((p) => p.id === trade.seller_id);
     const buyer = parties?.find((p) => p.id === trade.buyer_id);
     const isSeller = trade.seller_id === user.id;
     const isBuyer = trade.buyer_id === user.id;
 
+    const photos = (media ?? []).filter((m) => m.kind === "item_photo").map((m) => m.storage_path as string);
+    const evidenceRows = (media ?? []).filter((m) => m.kind === "evidence");
+    const { data: signed } = evidenceRows.length
+        ? await supabase.storage
+            .from("evidence")
+            .createSignedUrls(evidenceRows.map((e) => e.storage_path), 3600)
+        : { data: [] as { path: string | null; signedUrl: string }[] };
+    const evidence: EvidenceItem[] = evidenceRows.map((e) => ({
+        id: e.id,
+        url: signed?.find((s) => s.path === e.storage_path)?.signedUrl ?? null,
+        note: e.note,
+        mine: e.uploaded_by === user.id,
+        ext: String(e.storage_path).split(".").pop() ?? "file",
+    }));
+
     const rate = BigInt(trade.rate_cents_per_usdt);
     const zar = (units: bigint) => formatZar(unitsToZarCents(units, rate));
     const b = computeBreakdown(BigInt(trade.price_zar_cents), rate);
     const buyerBond = BigInt(trade.buyer_bond_units ?? 0);
-    const photos = (media ?? []).map((m) => m.storage_path as string);
 
     const lastStep = deliveries && deliveries.length > 0 ? deliveries[deliveries.length - 1].status : null;
     const nextIdx = (lastStep ? COURIER_STEP_ORDER.indexOf(lastStep) : -1) + 1;
@@ -89,6 +116,8 @@ async function TradeContent({ params }: { params: Promise<{ id: string }> }) {
             : null;
 
     const completed = events?.find((e) => e.event_name === "TradeCompleted");
+    const refunded = events?.find((e) => e.event_name === "DisputeResolvedRefund");
+    const inProgress = ["dispatched", "delivered", "disputed"].includes(trade.status);
 
     return (
         <div className="space-y-6">
@@ -101,6 +130,7 @@ async function TradeContent({ params }: { params: Promise<{ id: string }> }) {
                     {trade.category} · {trade.condition.replace("_", " ")} · Seller: {seller?.display_name}
                     {buyer ? ` · Buyer: ${buyer.display_name}` : ""}
                 </p>
+                <p className="text-sm font-medium">{reputationLine(stats as SellerStats | null)}</p>
             </div>
 
             {trade.status === "completed" && completed && (
@@ -110,8 +140,62 @@ async function TradeContent({ params }: { params: Promise<{ id: string }> }) {
                     </CardHeader>
                     <CardContent className="space-y-1 text-sm">
                         <p>Seller received (price − fee + bond back): {zar(BigInt(completed.data.sellerPayout))}</p>
-                        <p>Buyer bond returned: {zar(BigInt(completed.data.buyerBondReturned))}</p>
+                        <p>Buyer received (bond returned): {zar(BigInt(completed.data.buyerBondReturned))}</p>
                         <p className="font-medium">Pactora fee collected (2%): {zar(BigInt(completed.data.fee))}</p>
+                    </CardContent>
+                </Card>
+            )}
+
+            {trade.status === "resolved" && refunded && (
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Resolved by review. No fee charged.</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-1 text-sm">
+                        <p>Buyer received: {zar(BigInt(refunded.data.buyerAmount))}</p>
+                        <p>Seller received: {zar(BigInt(refunded.data.sellerAmount))}</p>
+                    </CardContent>
+                </Card>
+            )}
+
+            {dispute?.status === "resolved" && (
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Reviewer&apos;s decision</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-1 text-sm">
+                        <p className="font-medium">{OUTCOME_LABEL[dispute.outcome ?? ""] ?? dispute.outcome}</p>
+                        <p className="whitespace-pre-wrap">{dispute.admin_notes}</p>
+                    </CardContent>
+                </Card>
+            )}
+
+            {isBuyer && trade.status === "completed" && (
+                <Card>
+                    <CardHeader>
+                        <CardTitle>{rating ? "Your rating" : "Rate this seller"}</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-2 text-sm">
+                        {rating ? (
+                            <>
+                                <p className="text-xl text-amber-500">{"★".repeat(rating.rating)}{"☆".repeat(5 - rating.rating)}</p>
+                                {rating.comment && <p>{rating.comment}</p>}
+                            </>
+                        ) : (
+                            <RateSeller tradeId={trade.id} />
+                        )}
+                    </CardContent>
+                </Card>
+            )}
+
+            {isSeller && rating && (
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Buyer&apos;s rating</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-1 text-sm">
+                        <p className="text-xl text-amber-500">{"★".repeat(rating.rating)}{"☆".repeat(5 - rating.rating)}</p>
+                        {rating.comment && <p>{rating.comment}</p>}
                     </CardContent>
                 </Card>
             )}
@@ -140,6 +224,28 @@ async function TradeContent({ params }: { params: Promise<{ id: string }> }) {
                     termsHash={trade.terms_hash ?? ""}
                     inspectionEndsAt={trade.inspection_ends_at}
                     courierNext={courierNext}
+                />
+            )}
+
+            {(isSeller || isBuyer) && trade.buyer_id && inProgress && (
+                <DisputeSection
+                    tradeId={trade.id}
+                    role={isSeller ? "seller" : "buyer"}
+                    status={trade.status}
+                    sellerWallet={seller?.wallet_address ?? null}
+                    buyerWallet={buyer?.wallet_address ?? null}
+                    inspectionEndsAt={trade.inspection_ends_at}
+                    dispute={
+                        dispute
+                            ? {
+                                reason: dispute.reason,
+                                seller_response: dispute.seller_response,
+                                status: dispute.status,
+                                opened_by_me: dispute.opened_by === user.id,
+                            }
+                            : null
+                    }
+                    evidence={evidence}
                 />
             )}
 
@@ -222,9 +328,7 @@ async function TradeContent({ params }: { params: Promise<{ id: string }> }) {
                             <p key={i}>
                                 {utcStamp(d.created_at)} · {DELIVERY_LABEL[d.status] ?? d.status}
                                 {d.is_simulated && (
-                                    <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-800">
-                                        SIMULATED
-                                    </span>
+                                    <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-800">SIMULATED</span>
                                 )}
                             </p>
                         ))}

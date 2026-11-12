@@ -1,0 +1,129 @@
+"use server";
+
+import { keccak256, stringToHex } from "viem";
+import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { syncTradeFromChain } from "@/lib/sync";
+import { arbiterResolveForSeller, arbiterResolveRefund } from "@/lib/arbiter";
+import { chainTradeId } from "@/lib/chain-ids";
+import { parseZarToCents, zarCentsToUnits } from "@/lib/pricing";
+
+const OUTCOMES = [
+    "full_refund",
+    "partial_refund",
+    "release_to_seller",
+    "seller_bond_to_buyer",
+    "release_buyer_bond_forfeited",
+];
+
+export async function resolveDispute(input: {
+    tradeId: string;
+    outcome: string;
+    partialRefundZar?: string;
+    notes: string;
+}): Promise<{ error: string | null }> {
+    try {
+        const supabase = await createClient();
+        const {
+            data: { user },
+        } = await supabase.auth.getUser();
+        if (!user) return { error: "Please log in." };
+        const { data: me } = await supabase.from("profiles").select("is_admin").eq("id", user.id).single();
+        if (!me?.is_admin) return { error: "Administrators only." };
+
+        const notes = input.notes.trim();
+        if (notes.length < 20) return { error: "Write a reasoned decision (at least 20 characters)." };
+        if (!OUTCOMES.includes(input.outcome)) return { error: "Choose an outcome." };
+
+        const sync = await syncTradeFromChain(input.tradeId);
+        if (!sync.ok) return { error: sync.error ?? "Could not verify the trade on-chain." };
+        if (sync.status !== "disputed") return { error: "This transaction is not in dispute on-chain." };
+
+        const admin = createAdminClient();
+        const { data: trade } = await admin.from("trades").select("*").eq("id", input.tradeId).single();
+        if (!trade) return { error: "Transaction not found." };
+        const { data: seller } = await admin
+            .from("profiles")
+            .select("wallet_address")
+            .eq("id", trade.seller_id)
+            .single();
+        if (!seller?.wallet_address) return { error: "Seller wallet missing." };
+
+        const id = chainTradeId(trade.id, seller.wallet_address);
+        const principal = BigInt(trade.price_units);
+        const sBond = BigInt(trade.seller_bond_units);
+        const bBond = BigInt(trade.buyer_bond_units ?? 0);
+
+        let buyerAmount: bigint | null = null;
+        let sellerRuling: { forfeit: boolean } | null = null;
+
+        switch (input.outcome) {
+            case "full_refund":
+                buyerAmount = principal + bBond;
+                break;
+            case "partial_refund": {
+                const cents = parseZarToCents(input.partialRefundZar ?? "");
+                if (cents === null) return { error: "Enter a valid refund amount." };
+                const units = zarCentsToUnits(cents, BigInt(trade.rate_cents_per_usdt));
+                if (units <= 0n || units >= principal) {
+                    return { error: "The partial refund must be above R0 and below the item price." };
+                }
+                buyerAmount = units + bBond;
+                break;
+            }
+            case "seller_bond_to_buyer":
+                buyerAmount = principal + sBond + bBond;
+                break;
+            case "release_to_seller":
+                sellerRuling = { forfeit: false };
+                break;
+            case "release_buyer_bond_forfeited":
+                sellerRuling = { forfeit: true };
+                break;
+        }
+
+        const decisionHash = keccak256(
+            stringToHex(
+                JSON.stringify({
+                    tradeId: trade.id,
+                    outcome: input.outcome,
+                    buyerAmount: buyerAmount === null ? null : buyerAmount.toString(),
+                    forfeit: sellerRuling?.forfeit ?? null,
+                    notes,
+                    decidedBy: user.id,
+                })
+            )
+        );
+
+        const txHash =
+            buyerAmount !== null
+                ? await arbiterResolveRefund(id, buyerAmount, decisionHash)
+                : await arbiterResolveForSeller(id, sellerRuling!.forfeit, decisionHash);
+
+        await admin
+            .from("disputes")
+            .update({
+                status: "resolved",
+                outcome: input.outcome,
+                buyer_amount_units: buyerAmount === null ? null : Number(buyerAmount),
+                admin_notes: notes,
+                decision_hash: decisionHash,
+                resolved_by: user.id,
+                resolved_at: new Date().toISOString(),
+            })
+            .eq("trade_id", trade.id);
+
+        await admin.from("audit_logs").insert({
+            actor_id: user.id,
+            action: "dispute_resolved",
+            entity: "trade",
+            entity_id: trade.id,
+            details: { outcome: input.outcome, decision_hash: decisionHash, tx_hash: txHash },
+        });
+
+        await syncTradeFromChain(trade.id, txHash);
+        return { error: null };
+    } catch (e) {
+        return { error: e instanceof Error ? e.message : "Something went wrong." };
+    }
+}

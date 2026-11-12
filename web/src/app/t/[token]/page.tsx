@@ -7,7 +7,8 @@ import { AcceptButton } from "@/components/accept-button";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { computeBreakdown, formatZar, unitsToZarCents } from "@/lib/pricing";
-import { STATUS_LABEL, inspectionLabel, photoUrl } from "@/lib/trade-ui";
+//import { STATUS_LABEL, inspectionLabel, photoUrl } from "@/lib/trade-ui";
+import { STATUS_LABEL, inspectionLabel, photoUrl, reputationLine, type SellerStats } from "@/lib/trade-ui";
 
 async function BuyerContent({ params }: { params: Promise<{ token: string }> }) {
     await connection();
@@ -34,6 +35,7 @@ async function BuyerContent({ params }: { params: Promise<{ token: string }> }) 
         );
     }
     if (t.is_seller) redirect(`/trades/${t.id}`);
+    const { data: stats } = await supabase.rpc("seller_stats_for_token", { p_token: token });
 
     const { data: profile } = await supabase
         .from("profiles")
@@ -59,6 +61,7 @@ async function BuyerContent({ params }: { params: Promise<{ token: string }> }) 
                 </p>
                 <h1 className="text-2xl font-bold">{t.title}</h1>
                 <p className="text-muted-foreground">
+                    <p className="text-sm font-medium">{reputationLine(stats as SellerStats | null)}</p>
                     {t.category} · {t.condition.replace("_", " ")} · Seller: {t.seller_name}
                 </p>
             </div>
