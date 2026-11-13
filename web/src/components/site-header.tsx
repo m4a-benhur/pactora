@@ -35,8 +35,12 @@ async function Nav() {
   const items = user
     ? [
         { href: "/dashboard", label: "Dashboard" },
-        { href: "/trades/new", label: "New deal" },
-        { href: "/ramp", label: "Funds" },
+        ...(!isAdmin
+          ? [
+              { href: "/trades/new", label: "New deal" },
+              { href: "/ramp", label: "Funds" },
+            ]
+          : []),
         ...(isAdmin ? [{ href: "/admin", label: "Admin" }] : []),
       ]
     : [{ href: "/login", label: "Log in" }];

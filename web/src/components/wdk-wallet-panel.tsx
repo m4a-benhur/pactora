@@ -98,11 +98,11 @@ export function WdkWalletPanel({ savedAddress }: { savedAddress: string | null }
     return (
         <Card>
             <CardHeader>
-                <CardTitle>Your Pactora wallet (Tether WDK)</CardTitle>
+                <CardTitle>Your Pactora wallet</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4 text-sm">
                 <p className="text-xs text-muted-foreground">
-                    Self-custodial wallet created on this device. Test network only — DEMO, NO REAL MONEY.
+                    Self-custodial wallet created on this device.
                 </p>
 
                 {w.status === "checking" && <p>Loading wallet…</p>}
