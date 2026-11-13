@@ -127,7 +127,7 @@ export function CreateTradeForm({ rateCentsPerUsdt }: { rateCentsPerUsdt: number
                     <Button type="submit" disabled={pending} className="w-full">
                         {pending ? "Creating…" : "Create transaction"}
                     </Button>
-                    <p className="text-xs text-red-600">DEMO — NO REAL MONEY. Exchange rate is simulated.</p>
+                    <p className="text-xs text-red-600">Exchange rate is simulated.</p>
                 </form>
             </CardContent>
         </Card>

@@ -98,7 +98,7 @@ export default function Home() {
         <div className="rounded-3xl bg-primary px-6 py-10 text-center text-primary-foreground sm:px-12">
           <h2 className="text-3xl font-semibold">Try a protected deal in two minutes</h2>
           <p className="mx-auto mt-3 max-w-xl text-primary-foreground/80">
-            Pactora is a hackathon demo on a test network. Everything is simulated, so you can explore without risking a cent.
+            Pactora is a demo on a test network. Everything is simulated, so you can explore without risking a cent.
           </p>
           <Link href="/signup" className={`${btn} mt-6 bg-accent text-accent-foreground hover:opacity-90`}>Create a free account</Link>
         </div>
@@ -106,7 +106,7 @@ export default function Home() {
 
       <footer className="border-t">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-2 px-4 py-6 text-sm text-muted-foreground sm:px-6">
-          <span>© Pactora. DEMO — NO REAL MONEY.</span>
+          <span>© Pactora. </span>
           <span>Test tokens on Ethereum Sepolia</span>
         </div>
       </footer>

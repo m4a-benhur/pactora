@@ -38,7 +38,7 @@ async function Stats() {
 
   return (
     <main className="mx-auto max-w-4xl space-y-8 p-6">
-      <p className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm">DEMO — NO REAL MONEY. All amounts are testnet and simulated.</p>
+      <p className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm">All amounts are testnet and simulated.</p>
       <header className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Platform overview</h1>
         <Link href="/admin" className="text-sm underline">Disputes</Link>

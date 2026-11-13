@@ -4,7 +4,7 @@ export function PageShell({ children, width = "max-w-3xl" }: { children: ReactNo
   return (
     <main className={`mx-auto w-full ${width} space-y-6 px-4 py-8 sm:px-6`}>
       {children}
-      <p className="pt-2 text-center text-xs text-muted-foreground">DEMO — NO REAL MONEY · Test network only</p>
+      <p className="pt-2 text-center text-xs text-muted-foreground">Test network</p>
     </main>
   );
 }

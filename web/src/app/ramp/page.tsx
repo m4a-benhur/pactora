@@ -31,7 +31,7 @@ async function RampContent() {
   return (
     <main className="mx-auto max-w-xl space-y-6 p-6">
       <p className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm">
-        DEMO — NO REAL MONEY. Rates and fees are simulated.
+        Rates and fees are simulated.
       </p>
       <header className="space-y-1">
         <h1 className="text-2xl font-semibold">Add or withdraw funds</h1>

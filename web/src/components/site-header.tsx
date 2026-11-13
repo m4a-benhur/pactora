@@ -12,7 +12,7 @@ export function SiteHeader() {
   return (
     <header className="sticky top-0 z-40 border-b bg-background/85 backdrop-blur">
       <div className="bg-accent/70 py-1 text-center text-xs font-medium text-accent-foreground">
-        DEMO — NO REAL MONEY · Ethereum Sepolia test network
+        Ethereum Sepolia test network
       </div>
       <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4 sm:px-6">
         <Link href="/" aria-label="Pactora home"><Wordmark /></Link>

@@ -89,7 +89,7 @@ export function AuthForm({ mode, next }: { mode: "login" | "signup"; next?: stri
                         </>
                     )}
                 </p>
-                <p className="mt-4 text-xs text-red-600">DEMO — NO REAL MONEY</p>
+                <p className="mt-4 text-xs text-red-600">Pactora</p>
             </CardContent>
         </Card>
     );

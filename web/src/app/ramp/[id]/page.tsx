@@ -33,7 +33,7 @@ async function Detail({ params }: { params: Promise<{ id: string }> }) {
   return (
     <main className="mx-auto max-w-xl space-y-6 p-6">
       <p className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm">
-        DEMO — NO REAL MONEY. This is a simulated {kind === "on" ? "purchase" : "withdrawal"}.
+        DEMO. This is a simulated {kind === "on" ? "purchase" : "withdrawal"}.
       </p>
       <header>
         <h1 className="text-2xl font-semibold">{kind === "on" ? "Buy tUSDT" : "Cash out to rand"}</h1>
