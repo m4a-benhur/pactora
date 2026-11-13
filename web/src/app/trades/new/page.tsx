@@ -3,6 +3,7 @@ import { connection } from "next/server";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { CreateTradeForm } from "@/components/create-trade-form";
+import { Loading, PageHeader, PageShell } from "@/components/page-shell";
 
 async function NewTradeContent() {
     await connection();
@@ -23,10 +24,11 @@ async function NewTradeContent() {
 
 export default function NewTradePage() {
     return (
-        <main className="mx-auto max-w-xl space-y-4 p-6">
-            <Suspense fallback={<p>Loading…</p>}>
+        <PageShell width="max-w-xl">
+            <PageHeader title="Create a protected deal" subtitle="Describe the item, set the price, then share one link with your buyer." />
+            <Suspense fallback={<Loading label="Loading" />}>
                 <NewTradeContent />
             </Suspense>
-        </main>
+        </PageShell>
     );
 }

@@ -278,7 +278,7 @@ export function TradeActions(p: Props) {
                 {p.inspectionEndsAt && <InspectionCountdown endsAt={p.inspectionEndsAt} />}
                 <p>
                     Check the item against the listing. If it&apos;s as described, confirm to release payment
-                    to the seller. Reporting a problem is added in the next update.
+                    to the seller. If something is wrong, report it in the section below instead.
                 </p>
                 <WalletGate expected={myWallet}>
                     <Button onClick={() => simpleCall("confirmAcceptance")} disabled={busy}>

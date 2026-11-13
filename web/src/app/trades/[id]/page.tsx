@@ -10,13 +10,13 @@ import { TradeActions } from "@/components/trade-actions";
 import { DisputeSection, type EvidenceItem } from "@/components/dispute-section";
 import { RateSeller } from "@/components/rate-seller";
 import { buttonVariants } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { KV, Loading, Notice, PageHeader, PageShell, Panel } from "@/components/page-shell";
+import { StatusBadge } from "@/components/status-badge";
+import { TradeProgress } from "@/components/trade-progress";
 import { computeBreakdown, formatZar, unitsToZarCents } from "@/lib/pricing";
 import {
     COURIER_STEP_ORDER,
     DELIVERY_LABEL,
-    OUTCOME_LABEL,
-    STATUS_LABEL,
     inspectionLabel,
     photoUrl,
     reputationLine,
@@ -120,96 +120,83 @@ async function TradeContent({ params }: { params: Promise<{ id: string }> }) {
     const forfeit = events?.find((e) => e.event_name === "DisputeResolvedWithForfeit");
 
     const inProgress = ["dispatched", "delivered", "disputed"].includes(trade.status);
+    const stars = (n: number) => `${"★".repeat(n)}${"☆".repeat(5 - n)}`;
 
     return (
         <div className="space-y-6">
-            <div>
-                <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                    {STATUS_LABEL[trade.status] ?? trade.status}
-                </p>
-                <h1 className="text-2xl font-bold">{trade.title}</h1>
-                <p className="text-muted-foreground">
-                    {trade.category} · {trade.condition.replace("_", " ")} · Seller: {seller?.display_name}
-                    {buyer ? ` · Buyer: ${buyer.display_name}` : ""}
-                </p>
-                <p className="text-sm font-medium">{reputationLine(stats as SellerStats | null)}</p>
-            </div>
+            <PageHeader
+                eyebrow={<StatusBadge status={trade.status} />}
+                title={trade.title}
+                subtitle={
+                    <>
+                        <p>
+                            {trade.category} · {trade.condition.replace("_", " ")} · Seller: {seller?.display_name}
+                            {buyer ? ` · Buyer: ${buyer.display_name}` : ""}
+                        </p>
+                        <p className="mt-1 font-medium text-foreground">{reputationLine(stats as SellerStats | null)}</p>
+                    </>
+                }
+            />
+
+            <TradeProgress status={trade.status} />
+
+            {trade.status === "disputed" && <Notice tone="danger">This deal is in dispute. Funds stay locked until a reviewer decides.</Notice>}
 
             {trade.status === "completed" && completed && (
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Completed ✓ Funds released</CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-1 text-sm">
-                        <p>Seller received (price − fee + bond back): {zar(BigInt(completed.data.sellerPayout))}</p>
-                        <p>Buyer received (bond returned): {zar(BigInt(completed.data.buyerBondReturned))}</p>
-                        <p className="font-medium">Pactora fee collected (2%): {zar(BigInt(completed.data.fee))}</p>
-                    </CardContent>
-                </Card>
+                <Panel title="Completed ✓ Funds released" className="border-primary/30 bg-primary/5">
+                    <dl className="space-y-1.5">
+                        <KV label="Seller received (price − fee + bond back)">{zar(BigInt(completed.data.sellerPayout))}</KV>
+                        <KV label="Buyer received (bond returned)">{zar(BigInt(completed.data.buyerBondReturned))}</KV>
+                        <KV label="Pactora fee collected (2%)" strong>{zar(BigInt(completed.data.fee))}</KV>
+                    </dl>
+                </Panel>
             )}
 
             {(trade.status === "resolved" || trade.status === "completed") && (refunded || forfeit) && (
-                <Card>
-                    <CardHeader>
-                        <CardTitle>
-                            {trade.status === "resolved" ? "Resolved by review. No fee charged." : "Resolved by review."}
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-1 text-sm">
+                <Panel title={trade.status === "resolved" ? "Resolved by review. No fee charged." : "Resolved by review."}>
+                    <dl className="space-y-1.5">
                         {refunded && (
                             <>
-                                <p>Buyer received: {zar(BigInt(refunded.data.buyerAmount))}</p>
-                                <p>Seller received: {zar(BigInt(refunded.data.sellerAmount))}</p>
+                                <KV label="Buyer received">{zar(BigInt(refunded.data.buyerAmount))}</KV>
+                                <KV label="Seller received">{zar(BigInt(refunded.data.sellerAmount))}</KV>
                             </>
                         )}
                         {forfeit && (
                             <>
-                                <p>Buyer received: {zar(BigInt(forfeit.data.toBuyer))}</p>
-                                <p>Seller received: {zar(BigInt(forfeit.data.toSeller))}</p>
-                                <p className="font-medium">
-                                    Forfeited bond to Pactora: {zar(BigInt(forfeit.data.toTreasury))}
-                                </p>
+                                <KV label="Buyer received">{zar(BigInt(forfeit.data.toBuyer))}</KV>
+                                <KV label="Seller received">{zar(BigInt(forfeit.data.toSeller))}</KV>
+                                <KV label="Forfeited bond to Pactora" strong>{zar(BigInt(forfeit.data.toTreasury))}</KV>
                             </>
                         )}
-                    </CardContent>
-                </Card>
+                    </dl>
+                </Panel>
             )}
 
             {isBuyer && trade.status === "completed" && (
-                <Card>
-                    <CardHeader>
-                        <CardTitle>{rating ? "Your rating" : "Rate this seller"}</CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-2 text-sm">
-                        {rating ? (
-                            <>
-                                <p className="text-xl text-amber-500">{"★".repeat(rating.rating)}{"☆".repeat(5 - rating.rating)}</p>
-                                {rating.comment && <p>{rating.comment}</p>}
-                            </>
-                        ) : (
-                            <RateSeller tradeId={trade.id} />
-                        )}
-                    </CardContent>
-                </Card>
+                <Panel title={rating ? "Your rating" : "Rate this seller"}>
+                    {rating ? (
+                        <>
+                            <p className="text-xl text-amber-500" aria-label={`${rating.rating} out of 5 stars`}>{stars(rating.rating)}</p>
+                            {rating.comment && <p>{rating.comment}</p>}
+                        </>
+                    ) : (
+                        <RateSeller tradeId={trade.id} />
+                    )}
+                </Panel>
             )}
 
             {isSeller && rating && (
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Buyer&apos;s rating</CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-1 text-sm">
-                        <p className="text-xl text-amber-500">{"★".repeat(rating.rating)}{"☆".repeat(5 - rating.rating)}</p>
-                        {rating.comment && <p>{rating.comment}</p>}
-                    </CardContent>
-                </Card>
+                <Panel title="Buyer's rating">
+                    <p className="text-xl text-amber-500" aria-label={`${rating.rating} out of 5 stars`}>{stars(rating.rating)}</p>
+                    {rating.comment && <p>{rating.comment}</p>}
+                </Panel>
             )}
 
             {photos.length > 0 && (
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                     {photos.map((p) => (
                         // eslint-disable-next-line @next/next/no-img-element
-                        <img key={p} src={photoUrl(p)} alt={trade.title} className="aspect-square rounded-md object-cover" />
+                        <img key={p} src={photoUrl(p)} alt={trade.title} className="aspect-square w-full rounded-2xl border object-cover" />
                     ))}
                 </div>
             )}
@@ -255,111 +242,88 @@ async function TradeContent({ params }: { params: Promise<{ id: string }> }) {
             )}
 
             {isSeller && trade.status === "open" && (
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Photos</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        <PhotoUploader tradeId={trade.id} count={photos.length} />
-                    </CardContent>
-                </Card>
+                <Panel title="Photos">
+                    <PhotoUploader tradeId={trade.id} count={photos.length} />
+                </Panel>
             )}
 
             {isSeller && trade.status === "open" && (
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Share with your buyer</CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-3 text-sm">
-                        <p className="break-all font-mono text-xs">/t/{trade.share_token}</p>
-                        <CopyLink path={`/t/${trade.share_token}`} />
-                        {!seller?.wallet_address && (
-                            <p className="text-amber-700">Link your wallet on the dashboard before going live.</p>
-                        )}
-                    </CardContent>
-                </Card>
+                <Panel title="Share with your buyer">
+                    <p className="break-all rounded-lg bg-muted px-3 py-2 font-mono text-xs">/t/{trade.share_token}</p>
+                    <CopyLink path={`/t/${trade.share_token}`} />
+                    {!seller?.wallet_address && <Notice tone="warn">Link your wallet on the dashboard before going live.</Notice>}
+                </Panel>
             )}
 
-            <Card>
-                <CardHeader>
-                    <CardTitle>Item</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-2 text-sm">
-                    <p className="whitespace-pre-wrap">{trade.description}</p>
-                    {trade.known_defects && (
-                        <p>
-                            <span className="font-medium">Known defects:</span> {trade.known_defects}
-                        </p>
-                    )}
+            <Panel title="Item">
+                <p className="whitespace-pre-wrap">{trade.description}</p>
+                {trade.known_defects && (
                     <p>
-                        Delivery: {trade.delivery_method === "courier" ? "Courier (simulated in this demo)" : "In-person collection"} ·
-                        Inspection: {inspectionLabel(trade.inspection_minutes)}
+                        <span className="font-medium">Known defects:</span> {trade.known_defects}
                     </p>
-                </CardContent>
-            </Card>
+                )}
+                <p className="text-muted-foreground">
+                    Delivery: {trade.delivery_method === "courier" ? "Courier (simulated in this demo)" : "In-person collection"} ·
+                    Inspection: {inspectionLabel(trade.inspection_minutes)}
+                </p>
+            </Panel>
 
-            <Card>
-                <CardHeader>
-                    <CardTitle>Money breakdown (simulated rate)</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-1 text-sm">
-                    <p>Price: {formatZar(BigInt(trade.price_zar_cents))}</p>
-                    <p>Pactora fee (2%, only on completion): {zar(b.feeUnits)}</p>
+            <Panel title="Money breakdown (simulated rate)">
+                <dl className="space-y-1.5">
+                    <KV label="Price">{formatZar(BigInt(trade.price_zar_cents))}</KV>
+                    <KV label="Pactora fee (2%, only on completion)">{zar(b.feeUnits)}</KV>
                     {isSeller ? (
                         <>
-                            <p className="font-medium">You receive: {zar(b.sellerNetUnits)}</p>
-                            <p>Your security bond: {zar(b.sellerBondUnits)} (returned on a fair completion)</p>
+                            <KV label="You receive" strong>{zar(b.sellerNetUnits)}</KV>
+                            <KV label="Your security bond (returned on a fair completion)">{zar(b.sellerBondUnits)}</KV>
                         </>
                     ) : (
                         <>
-                            <p>Seller security bond: {zar(b.sellerBondUnits)}</p>
-                            <p className="font-medium">Your total: {zar(b.principalUnits + buyerBond)}</p>
+                            <KV label="Seller security bond">{zar(b.sellerBondUnits)}</KV>
+                            <KV label="Your total" strong>{zar(b.principalUnits + buyerBond)}</KV>
                         </>
                     )}
-                    {trade.buyer_id && <p>Buyer bond: {zar(buyerBond)}</p>}
-                    <p className="text-xs text-muted-foreground">
-                        Settlement uses test USDT behind the scenes. Rate: R{(trade.rate_cents_per_usdt / 100).toFixed(2)} = 1 USDT (simulated).
-                    </p>
-                </CardContent>
-            </Card>
+                    {trade.buyer_id && <KV label="Buyer bond">{zar(buyerBond)}</KV>}
+                </dl>
+                <p className="text-xs text-muted-foreground">
+                    Settlement uses test USDT behind the scenes. Rate: R{(trade.rate_cents_per_usdt / 100).toFixed(2)} = 1 USDT (simulated).
+                </p>
+            </Panel>
 
             {deliveries && deliveries.length > 0 && (
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Delivery timeline</CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-1 text-sm">
+                <Panel title="Delivery timeline">
+                    <ol className="space-y-3 border-l-2 pl-4">
                         {deliveries.map((d, i) => (
-                            <p key={i}>
-                                {utcStamp(d.created_at)} · {DELIVERY_LABEL[d.status] ?? d.status}
-                                {d.is_simulated && (
-                                    <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-800">SIMULATED</span>
-                                )}
-                            </p>
+                            <li key={i} className="relative">
+                                <span className="absolute -left-[1.4rem] top-1.5 size-2.5 rounded-full bg-primary" />
+                                <p className="font-medium">{DELIVERY_LABEL[d.status] ?? d.status}
+                                    {d.is_simulated && (
+                                        <span className="ml-2 rounded-full bg-accent/60 px-2 py-0.5 text-xs font-medium text-accent-foreground">SIMULATED</span>
+                                    )}
+                                </p>
+                                <p className="text-xs text-muted-foreground">{utcStamp(d.created_at)}</p>
+                            </li>
                         ))}
-                    </CardContent>
-                </Card>
+                    </ol>
+                </Panel>
             )}
 
             {events && events.length > 0 && (
-                <Card>
-                    <CardHeader>
-                        <CardTitle>On-chain record (Sepolia)</CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-1 text-sm">
+                <Panel title="On-chain record (Sepolia)">
+                    <ul className="space-y-1">
                         {events.map((e, i) => (
-                            <p key={i}>
-                                {e.event_name} ·{" "}
-                                <a href={explorerTx(e.tx_hash)} target="_blank" rel="noreferrer" className="underline">
+                            <li key={i} className="flex items-center justify-between gap-3">
+                                <span>{e.event_name}</span>
+                                <a href={explorerTx(e.tx_hash)} target="_blank" rel="noreferrer" className="font-mono text-xs underline">
                                     {e.tx_hash.slice(0, 10)}…
                                 </a>
-                            </p>
+                            </li>
                         ))}
-                    </CardContent>
-                </Card>
+                    </ul>
+                </Panel>
             )}
 
-            <Link href="/dashboard" className={buttonVariants({ variant: "outline" })}>
+            <Link href="/dashboard" className={buttonVariants({ variant: "outline", className: "rounded-full" })}>
                 Back to dashboard
             </Link>
         </div>
@@ -368,11 +332,10 @@ async function TradeContent({ params }: { params: Promise<{ id: string }> }) {
 
 export default function TradePage({ params }: { params: Promise<{ id: string }> }) {
     return (
-        <main className="mx-auto max-w-2xl space-y-4 p-6">
-            <Suspense fallback={<p>Loading transaction…</p>}>
+        <PageShell>
+            <Suspense fallback={<Loading label="Loading transaction" />}>
                 <TradeContent params={params} />
             </Suspense>
-            <p className="text-xs text-red-600">DEMO — NO REAL MONEY</p>
-        </main>
+        </PageShell>
     );
 }

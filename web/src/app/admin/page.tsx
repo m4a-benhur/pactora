@@ -3,7 +3,8 @@ import { connection } from "next/server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { buttonVariants } from "@/components/ui/button";
+import { Loading, PageHeader, PageShell, Panel } from "@/components/page-shell";
 import { formatZar } from "@/lib/pricing";
 import { OUTCOME_LABEL } from "@/lib/trade-ui";
 
@@ -35,43 +36,55 @@ async function AdminContent() {
         ? await supabase.from("trades").select("id, title").in("id", ids)
         : { data: [] as { id: string; title: string }[] };
 
+    const row = "-mx-2 flex items-center justify-between gap-3 rounded-lg px-2 py-3 hover:bg-muted/60";
+
     return (
         <div className="space-y-6">
-            <h1 className="text-2xl font-bold">Administrator: disputes</h1>
+            <PageHeader
+                title="Administrator: disputes"
+                subtitle="Review the evidence, then record a fair decision."
+                actions={
+                    <Link href="/admin/stats" className={buttonVariants({ variant: "outline", className: "rounded-full" })}>
+                        Platform overview
+                    </Link>
+                }
+            />
 
-            <Card>
-                <CardHeader>
-                    <CardTitle>Waiting for a decision ({disputed?.length ?? 0})</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-2 text-sm">
-                    {(!disputed || disputed.length === 0) && <p>No open disputes.</p>}
-                    {disputed?.map((t) => (
-                        <p key={t.id}>
-                            <Link href={`/admin/disputes/${t.id}`} className="underline">
-                                {t.title}
-                            </Link>{" "}
-                            · {formatZar(BigInt(t.price_zar_cents))}
-                        </p>
-                    ))}
-                </CardContent>
-            </Card>
+            <Panel title={`Waiting for a decision (${disputed?.length ?? 0})`}>
+                {(!disputed || disputed.length === 0) && <p className="text-muted-foreground">No open disputes. Nice and quiet.</p>}
+                {disputed && disputed.length > 0 && (
+                    <ul className="divide-y">
+                        {disputed.map((t) => (
+                            <li key={t.id}>
+                                <Link href={`/admin/disputes/${t.id}`} className={row}>
+                                    <span className="truncate font-medium">{t.title}</span>
+                                    <span className="shrink-0 text-muted-foreground">{formatZar(BigInt(t.price_zar_cents))}</span>
+                                </Link>
+                            </li>
+                        ))}
+                    </ul>
+                )}
+            </Panel>
 
-            <Card>
-                <CardHeader>
-                    <CardTitle>Recently resolved</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-2 text-sm">
-                    {(!resolved || resolved.length === 0) && <p>None yet.</p>}
-                    {resolved?.map((r) => (
-                        <p key={r.trade_id}>
-                            <Link href={`/admin/disputes/${r.trade_id}`} className="underline">
-                                {titles?.find((t) => t.id === r.trade_id)?.title ?? r.trade_id}
-                            </Link>{" "}
-                            · {OUTCOME_LABEL[r.outcome ?? ""] ?? r.outcome}
-                        </p>
-                    ))}
-                </CardContent>
-            </Card>
+            <Panel title="Recently resolved">
+                {(!resolved || resolved.length === 0) && <p className="text-muted-foreground">None yet.</p>}
+                {resolved && resolved.length > 0 && (
+                    <ul className="divide-y">
+                        {resolved.map((r) => (
+                            <li key={r.trade_id}>
+                                <Link href={`/admin/disputes/${r.trade_id}`} className={row}>
+                                    <span className="truncate font-medium">
+                                        {titles?.find((t) => t.id === r.trade_id)?.title ?? r.trade_id}
+                                    </span>
+                                    <span className="shrink-0 text-right text-muted-foreground">
+                                        {OUTCOME_LABEL[r.outcome ?? ""] ?? r.outcome}
+                                    </span>
+                                </Link>
+                            </li>
+                        ))}
+                    </ul>
+                )}
+            </Panel>
 
             <Link href="/dashboard" className="text-sm underline">
                 Back to dashboard
@@ -82,12 +95,10 @@ async function AdminContent() {
 
 export default function AdminPage() {
     return (
-        <main className="mx-auto max-w-2xl space-y-4 p-6">
-            <Suspense fallback={<p>Loading…</p>}>
+        <PageShell>
+            <Suspense fallback={<Loading label="Loading" />}>
                 <AdminContent />
             </Suspense>
-            <p className="text-xs text-red-600">DEMO — NO REAL MONEY</p>
-            <Link href="/admin/stats" className="underline text-sm">Platform overview</Link>
-        </main>
+        </PageShell>
     );
 }

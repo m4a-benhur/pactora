@@ -5,10 +5,10 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { AcceptButton } from "@/components/accept-button";
 import { buttonVariants } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { KV, Loading, Notice, PageHeader, PageShell, Panel } from "@/components/page-shell";
+import { StatusBadge } from "@/components/status-badge";
 import { computeBreakdown, formatZar, unitsToZarCents } from "@/lib/pricing";
-//import { STATUS_LABEL, inspectionLabel, photoUrl } from "@/lib/trade-ui";
-import { STATUS_LABEL, inspectionLabel, photoUrl, reputationLine, type SellerStats } from "@/lib/trade-ui";
+import { inspectionLabel, photoUrl, reputationLine, type SellerStats } from "@/lib/trade-ui";
 
 async function BuyerContent({ params }: { params: Promise<{ token: string }> }) {
     await connection();
@@ -24,14 +24,9 @@ async function BuyerContent({ params }: { params: Promise<{ token: string }> }) 
     if (!t) notFound();
     if (t.unavailable) {
         return (
-            <Card>
-                <CardHeader>
-                    <CardTitle>This transaction is no longer available</CardTitle>
-                </CardHeader>
-                <CardContent className="text-sm">
-                    Another buyer has already accepted it, or it was cancelled.
-                </CardContent>
-            </Card>
+            <Panel title="This transaction is no longer available">
+                <p className="text-muted-foreground">Another buyer has already accepted it, or it was cancelled.</p>
+            </Panel>
         );
     }
     if (t.is_seller) redirect(`/trades/${t.id}`);
@@ -55,112 +50,90 @@ async function BuyerContent({ params }: { params: Promise<{ token: string }> }) 
 
     return (
         <div className="space-y-6">
-            <div>
-                <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                    {STATUS_LABEL[t.status] ?? t.status}
-                </p>
-                <h1 className="text-2xl font-bold">{t.title}</h1>
-<h1 className="text-2xl font-bold">{t.title}</h1>
-<p className="text-muted-foreground">
-    {t.category} · {t.condition.replace("_", " ")} · Seller: {t.seller_name}
-</p>
-<p className="text-sm font-medium">{reputationLine(stats as SellerStats | null)}</p>
-            </div>
+            <PageHeader
+                eyebrow={<StatusBadge status={t.status} />}
+                title={t.title}
+                subtitle={
+                    <>
+                        <p>{t.category} · {t.condition.replace("_", " ")} · Seller: {t.seller_name}</p>
+                        <p className="mt-1 font-medium text-foreground">{reputationLine(stats as SellerStats | null)}</p>
+                    </>
+                }
+            />
 
             {photos.length > 0 && (
                 <div className="grid grid-cols-2 gap-2">
                     {photos.map((p) => (
                         // eslint-disable-next-line @next/next/no-img-element
-                        <img key={p} src={photoUrl(p)} alt={t.title} className="aspect-square rounded-md object-cover" />
+                        <img key={p} src={photoUrl(p)} alt={t.title} className="aspect-square w-full rounded-2xl border object-cover" />
                     ))}
                 </div>
             )}
 
-            <Card>
-                <CardHeader>
-                    <CardTitle>About this item</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-2 text-sm">
-                    <p className="whitespace-pre-wrap">{t.description}</p>
-                    {t.known_defects && (
-                        <p>
-                            <span className="font-medium">Known defects:</span> {t.known_defects}
-                        </p>
-                    )}
+            <Panel title="About this item">
+                <p className="whitespace-pre-wrap">{t.description}</p>
+                {t.known_defects && (
                     <p>
-                        Delivery: {t.delivery_method === "courier" ? "Courier" : "In-person collection"} ·
-                        Inspection after you receive it: {inspectionLabel(t.inspection_minutes)}
+                        <span className="font-medium">Known defects:</span> {t.known_defects}
                     </p>
-                </CardContent>
-            </Card>
+                )}
+                <p className="text-muted-foreground">
+                    Delivery: {t.delivery_method === "courier" ? "Courier" : "In-person collection"} ·
+                    Inspection after you receive it: {inspectionLabel(t.inspection_minutes)}
+                </p>
+            </Panel>
 
-            <Card>
-                <CardHeader>
-                    <CardTitle>What you pay (simulated rate)</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-1 text-sm">
-                    <p>Item price: {formatZar(BigInt(t.price_zar_cents))}</p>
-                    <p>
-                        Your security bond: {zar(buyerBond)}{" "}
-                        {buyerBond > 0n ? "(refunded when the deal completes fairly)" : ""}
-                    </p>
-                    <p className="font-medium">Total you put into protection: {zar(total)}</p>
-                    <p className="text-muted-foreground">
-                        Pactora&apos;s 2% fee is taken from the seller&apos;s proceeds, so you pay nothing extra, and
-                        no fee is charged if the deal doesn&apos;t complete.
-                    </p>
-                    <p className="text-muted-foreground">
-                        {bondBps === 100n && isOpen
-                            ? "Why a bond? New accounts put down a small refundable 1% bond. It is never forfeited just for raising a dispute."
-                            : isOpen
-                                ? "No bond needed: you've completed 3 or more transactions."
-                                : ""}
-                    </p>
-                    <p className="text-muted-foreground">
-                        The seller also deposits a {zar(BigInt(t.seller_bond_units))} bond. Your money stays locked
-                        in escrow until you confirm the item, or a reviewer decides a dispute.
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                        Settlement uses test USDT behind the scenes. Rate: R{(t.rate_cents_per_usdt / 100).toFixed(2)} = 1 USDT (simulated).
-                    </p>
-                </CardContent>
-            </Card>
+            <Panel title="What you pay (simulated rate)">
+                <dl className="space-y-1.5">
+                    <KV label="Item price">{formatZar(BigInt(t.price_zar_cents))}</KV>
+                    <KV label={buyerBond > 0n ? "Your security bond (refunded when the deal completes fairly)" : "Your security bond"}>{zar(buyerBond)}</KV>
+                    <KV label="Total you put into protection" strong>{zar(total)}</KV>
+                </dl>
+                <p className="text-muted-foreground">
+                    Pactora&apos;s 2% fee is taken from the seller&apos;s proceeds, so you pay nothing extra, and
+                    no fee is charged if the deal doesn&apos;t complete.
+                </p>
+                <p className="text-muted-foreground">
+                    {bondBps === 100n && isOpen
+                        ? "Why a bond? New accounts put down a small refundable 1% bond. It is never forfeited just for raising a dispute."
+                        : isOpen
+                            ? "No bond needed: you've completed 3 or more transactions."
+                            : ""}
+                </p>
+                <p className="text-muted-foreground">
+                    The seller also deposits a {zar(BigInt(t.seller_bond_units))} bond. Your money stays locked
+                    in escrow until you confirm the item, or a reviewer decides a dispute.
+                </p>
+                <p className="text-xs text-muted-foreground">
+                    Settlement uses test USDT behind the scenes. Rate: R{(t.rate_cents_per_usdt / 100).toFixed(2)} = 1 USDT (simulated).
+                </p>
+            </Panel>
 
             {isOpen && (
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Accept and continue</CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-3 text-sm">
-                        {!walletLinked && (
-                            <p className="text-amber-700">
-                                You need a linked wallet first.{" "}
-                                <Link href="/dashboard" className="underline">
-                                    Set up your wallet on the dashboard
-                                </Link>
-                                , then come back to this link.
-                            </p>
-                        )}
-                        <AcceptButton token={token} disabled={!walletLinked} />
-                        <p className="text-xs text-muted-foreground">
-                            By accepting, you agree to the terms above. They can&apos;t be changed afterwards.
-                        </p>
-                    </CardContent>
-                </Card>
+                <Panel title="Accept and continue" className="border-primary/30">
+                    {!walletLinked && (
+                        <Notice tone="warn">
+                            You need a linked wallet first.{" "}
+                            <Link href="/dashboard" className="font-medium underline">
+                                Set up your wallet on the dashboard
+                            </Link>
+                            , then come back to this link.
+                        </Notice>
+                    )}
+                    <AcceptButton token={token} disabled={!walletLinked} />
+                    <p className="text-xs text-muted-foreground">
+                        By accepting, you agree to the terms above. They can&apos;t be changed afterwards.
+                    </p>
+                </Panel>
             )}
 
             {t.is_buyer && !isOpen && (
-                <Card>
-                    <CardHeader>
-                        <CardTitle>You accepted this transaction</CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-2 text-sm">
-                        <p>Next, the seller deposits their security bond. Then you&apos;ll be able to fund escrow.</p>
-                        <Link href={`/trades/${t.id}`} className={buttonVariants({ variant: "outline" })}>
-                            View my transaction
-                        </Link>
-                    </CardContent>
-                </Card>
+                <Panel title="You accepted this transaction">
+                    <p>Next, the seller deposits their security bond. Then you&apos;ll be able to fund escrow.</p>
+                    <Link href={`/trades/${t.id}`} className={buttonVariants({ variant: "outline", className: "rounded-full" })}>
+                        View my transaction
+                    </Link>
+                </Panel>
             )}
         </div>
     );
@@ -168,11 +141,10 @@ async function BuyerContent({ params }: { params: Promise<{ token: string }> }) 
 
 export default function BuyerPage({ params }: { params: Promise<{ token: string }> }) {
     return (
-        <main className="mx-auto max-w-2xl space-y-4 p-6">
-            <Suspense fallback={<p>Loading transaction…</p>}>
+        <PageShell width="max-w-2xl">
+            <Suspense fallback={<Loading label="Loading transaction" />}>
                 <BuyerContent params={params} />
             </Suspense>
-            <p className="text-xs text-red-600">DEMO — NO REAL MONEY</p>
-        </main>
+        </PageShell>
     );
 }
