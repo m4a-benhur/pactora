@@ -128,3 +128,44 @@
     @apply font-sans;
   }
 }
+
+
+
+/* Pactora theme: warm, friendly, trustworthy.
+   Paste this at the very END of web/src/app/globals.css (later rules override the shadcn defaults).
+   Assumes shadcn on Tailwind v4 (colours written as oklch). */
+
+:root {
+  --radius: 0.875rem;
+  --background: oklch(0.98 0.012 85);          /* warm cream */
+  --foreground: oklch(0.25 0.03 165);          /* deep green ink */
+  --card: oklch(0.995 0.006 85);
+  --card-foreground: oklch(0.25 0.03 165);
+  --popover: oklch(0.995 0.006 85);
+  --popover-foreground: oklch(0.25 0.03 165);
+  --primary: oklch(0.45 0.09 165);             /* forest green */
+  --primary-foreground: oklch(0.985 0.01 85);
+  --secondary: oklch(0.95 0.03 85);            /* sand */
+  --secondary-foreground: oklch(0.3 0.04 165);
+  --muted: oklch(0.955 0.015 85);
+  --muted-foreground: oklch(0.5 0.03 165);
+  --accent: oklch(0.88 0.12 85);               /* marigold */
+  --accent-foreground: oklch(0.28 0.05 70);
+  --destructive: oklch(0.55 0.2 27);
+  --border: oklch(0.9 0.02 85);
+  --input: oklch(0.88 0.025 85);
+  --ring: oklch(0.55 0.1 165);
+}
+
+body {
+  font-family: var(--font-figtree), ui-sans-serif, system-ui, sans-serif;
+  background: var(--background);
+  color: var(--foreground);
+}
+h1, h2, .font-display {
+  font-family: var(--font-fraunces), Georgia, serif;
+  letter-spacing: -0.015em;
+}
+::selection { background: var(--accent); color: var(--accent-foreground); }
+:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }

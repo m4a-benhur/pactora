@@ -1,60 +1,21 @@
 "use client";
 
-import { useState } from "react";
+import { useActionState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
+import { loginWithIdentifier, signUpWithUsername, type AuthState } from "@/app/auth/actions";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 export function AuthForm({ mode, next }: { mode: "login" | "signup"; next?: string }) {
-    const router = useRouter();
-    const [email, setEmail] = useState("");
-    const [password, setPassword] = useState("");
-    const [error, setError] = useState<string | null>(null);
-    const [notice, setNotice] = useState<string | null>(null);
-    const [loading, setLoading] = useState(false);
+    const [state, action, pending] = useActionState<AuthState, FormData>(
+        mode === "login" ? loginWithIdentifier : signUpWithUsername,
+        null
+    );
 
-    // Only allow same-site relative paths
-    const dest = next && next.startsWith("/") && !next.startsWith("//") ? next : "/dashboard";
+    // The server action re-checks this; it only allows same-site relative paths
     const suffix = next ? `?next=${encodeURIComponent(next)}` : "";
-
-    async function handleSubmit(e: React.FormEvent) {
-        e.preventDefault();
-        setError(null);
-        setNotice(null);
-
-        if (password.length < 8) {
-            setError("Password must be at least 8 characters.");
-            return;
-        }
-
-        setLoading(true);
-        const supabase = createClient();
-
-        if (mode === "signup") {
-            const { data, error } = await supabase.auth.signUp({ email, password });
-            if (error) {
-                setError(error.message);
-            } else if (data.session) {
-                router.push(dest);
-                router.refresh();
-            } else {
-                setNotice("Check your email to confirm your account, then log in.");
-            }
-        } else {
-            const { error } = await supabase.auth.signInWithPassword({ email, password });
-            if (error) {
-                setError(error.message);
-            } else {
-                router.push(dest);
-                router.refresh();
-            }
-        }
-        setLoading(false);
-    }
 
     return (
         <Card className="w-full max-w-sm">
@@ -62,33 +23,53 @@ export function AuthForm({ mode, next }: { mode: "login" | "signup"; next?: stri
                 <CardTitle>{mode === "login" ? "Log in to Pactora" : "Create your account"}</CardTitle>
             </CardHeader>
             <CardContent>
-                <form onSubmit={handleSubmit} className="space-y-4">
-                    <div className="space-y-2">
-                        <Label htmlFor="email">Email</Label>
-                        <Input
-                            id="email"
-                            type="email"
-                            autoComplete="email"
-                            required
-                            value={email}
-                            onChange={(e) => setEmail(e.target.value)}
-                        />
-                    </div>
+                <form action={action} className="space-y-4">
+                    <input type="hidden" name="next" value={next ?? ""} />
+
+                    {mode === "signup" ? (
+                        <>
+                            <div className="space-y-2">
+                                <Label htmlFor="username">Username</Label>
+                                <Input
+                                    id="username"
+                                    name="username"
+                                    autoComplete="username"
+                                    minLength={3}
+                                    maxLength={20}
+                                    pattern="[A-Za-z0-9_]+"
+                                    title="3 to 20 letters, numbers or underscores"
+                                    required
+                                />
+                                <p className="text-xs text-muted-foreground">3 to 20 letters, numbers or underscores.</p>
+                            </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="email">Email</Label>
+                                <Input id="email" name="email" type="email" autoComplete="email" required />
+                            </div>
+                        </>
+                    ) : (
+                        <div className="space-y-2">
+                            <Label htmlFor="identifier">Username or email</Label>
+                            <Input id="identifier" name="identifier" autoComplete="username" required />
+                        </div>
+                    )}
+
                     <div className="space-y-2">
                         <Label htmlFor="password">Password</Label>
                         <Input
                             id="password"
+                            name="password"
                             type="password"
                             autoComplete={mode === "login" ? "current-password" : "new-password"}
+                            minLength={mode === "signup" ? 8 : undefined}
                             required
-                            value={password}
-                            onChange={(e) => setPassword(e.target.value)}
                         />
                     </div>
-                    {error && <p className="text-sm text-red-600">{error}</p>}
-                    {notice && <p className="text-sm text-green-700">{notice}</p>}
-                    <Button type="submit" className="w-full" disabled={loading}>
-                        {loading ? "Please wait…" : mode === "login" ? "Log in" : "Sign up"}
+
+                    {state?.error && <p role="alert" className="text-sm text-red-600">{state.error}</p>}
+                    {state?.notice && <p role="status" className="text-sm text-green-700">{state.notice}</p>}
+                    <Button type="submit" className="w-full" disabled={pending}>
+                        {pending ? "Please wait…" : mode === "login" ? "Log in" : "Sign up"}
                     </Button>
                 </form>
                 <p className="mt-4 text-sm text-muted-foreground">

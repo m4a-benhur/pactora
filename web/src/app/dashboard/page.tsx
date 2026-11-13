@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatZar } from "@/lib/pricing";
 import { STATUS_LABEL } from "@/lib/trade-ui";
 
+
 async function DashboardContent() {
     await connection();
 
@@ -88,6 +89,8 @@ export default function DashboardPage() {
                 <DashboardContent />
             </Suspense>
             <p className="text-xs text-red-600">DEMO — NO REAL MONEY</p>
+                        <Link href="/ramp" className="underline text-sm">Add or withdraw funds</Link>
+
         </main>
     );
 }

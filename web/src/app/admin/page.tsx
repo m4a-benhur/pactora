@@ -87,6 +87,7 @@ export default function AdminPage() {
                 <AdminContent />
             </Suspense>
             <p className="text-xs text-red-600">DEMO — NO REAL MONEY</p>
+            <Link href="/admin/stats" className="underline text-sm">Platform overview</Link>
         </main>
     );
 }
