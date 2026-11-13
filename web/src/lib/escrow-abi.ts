@@ -11,6 +11,8 @@ export const escrowAbi = parseAbi([
     "function getTrade(bytes32 id) view returns ((address seller, address buyer, uint256 principal, uint256 sellerBond, uint256 buyerBond, uint256 feeBps, uint64 fundBy, uint64 dispatchBy, uint64 inspectionEnd, uint32 dispatchWindow, uint32 inspectionSeconds, bool autoRelease, bool deliveryAttested, uint8 status, bytes32 termsHash))",
     "function resolveRefund(bytes32 id, uint256 buyerAmount, bytes32 decisionHash)",
     "function resolveForSeller(bytes32 id, bool forfeitBuyerBond, bytes32 decisionHash)",
+      "function resolveWithForfeit(bytes32 id, uint8 forfeitingParty, bytes32 decisionHash)",
+  "event DisputeResolvedWithForfeit(bytes32 indexed id, uint256 toBuyer, uint256 toSeller, uint256 toTreasury, uint8 forfeitingParty, bytes32 decisionHash)",
     "event TradeCreated(bytes32 indexed id, address indexed seller, address indexed buyer, uint256 principal, uint256 sellerBond, uint256 buyerBond, uint256 feeBps, bytes32 termsHash)",
     "event TradeFunded(bytes32 indexed id, address indexed buyer, uint256 amountIn)",
     "event TradeDispatched(bytes32 indexed id)",

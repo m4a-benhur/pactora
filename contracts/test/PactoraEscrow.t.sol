@@ -424,8 +424,10 @@ contract PactoraEscrowTest is Test {
         _assertConserved();
     }
 
-    /// Scenario B: seller misconduct, seller bond goes to the buyer, no fee.
-    function test_resolveRefund_sellerMisconduct_bondToBuyer() public {
+    /// @dev LEGACY behaviour: bond -> the other party. The admin UI no longer
+    ///      calls resolveRefund for misconduct; it calls resolveWithForfeit
+    ///      (bond -> treasury) instead. Kept so the old ABI path stays tested.
+    function test_resolveRefund_sellerMisconduct_bondToBuyer_LEGACY() public {
         _toDisputed();
         vm.prank(admin);
         escrow.resolveRefund(ID, TOTAL, keccak256("decision-3"));
@@ -480,8 +482,12 @@ contract PactoraEscrowTest is Test {
         _assertConserved();
     }
 
-    /// Scenario C: buyer misconduct, buyer bond goes to the seller.
-    function test_resolveForSeller_buyerMisconduct_bondForfeited() public {
+    /// @dev LEGACY behaviour: buyer bond -> seller. The admin UI no longer calls
+    ///      this for misconduct; it calls resolveWithForfeit (bond -> treasury).
+    ///      Kept so the old ABI path stays tested.
+    function test_resolveForSeller_buyerMisconduct_bondForfeited_LEGACY()
+        public
+    {
         _toDisputed();
         vm.prank(admin);
         escrow.resolveForSeller(ID, true, keccak256("decision-5"));
@@ -635,6 +641,202 @@ contract PactoraEscrowTest is Test {
             B0 - (PRICE + BUYER_BOND) + buyerAmount
         );
         assertEq(token.balanceOf(treasury), 0);
+        assertEq(token.balanceOf(address(escrow)), 0);
+        _assertConserved();
+    }
+
+    // =============================================================
+    // ====== NEW: resolveWithForfeit (misconduct bond -> treasury) =====
+    // =============================================================
+    // Architecture decision: a forfeited bond goes to the Pactora treasury,
+    // never to the other party. This removes any financial incentive for
+    // either side to falsely accuse the other. The admin UI uses these
+    // paths for misconduct rulings; resolveRefund / resolveForSeller are
+    // still used for no-misconduct outcomes (full/partial refund, seller
+    // win with no penalty).
+
+    /// Seller misconduct: buyer refunded in full, seller bond seized -> treasury. No fee.
+    function test_resolveWithForfeit_sellerMisconduct_bondToTreasury() public {
+        _toDisputed();
+
+        vm.prank(admin);
+        escrow.resolveWithForfeit(ID, 1, keccak256("decision-seller-cheated"));
+
+        _assertStatus(PactoraEscrow.Status.Resolved);
+        assertEq(token.balanceOf(buyer), B0); // refunded in full
+        assertEq(token.balanceOf(seller), S0 - SELLER_BOND); // bond seized
+        assertEq(token.balanceOf(treasury), SELLER_BOND); // bond -> treasury
+        assertEq(token.balanceOf(address(escrow)), 0);
+        _assertConserved();
+    }
+
+    /// Buyer misconduct: seller paid as if completed (fee applies), buyer bond seized -> treasury.
+    function test_resolveWithForfeit_buyerMisconduct_bondAndFeeToTreasury()
+        public
+    {
+        _toDisputed();
+
+        vm.prank(admin);
+        escrow.resolveWithForfeit(ID, 2, keccak256("decision-buyer-cheated"));
+
+        _assertStatus(PactoraEscrow.Status.Resolved);
+        assertEq(token.balanceOf(seller), S0 + PRICE - FEE); // paid as completed
+        assertEq(token.balanceOf(buyer), B0 - PRICE - BUYER_BOND); // bond seized
+        assertEq(token.balanceOf(treasury), BUYER_BOND + FEE); // bond + fee -> treasury
+        assertEq(token.balanceOf(address(escrow)), 0);
+        _assertConserved();
+    }
+
+    /// Architecture regression: the buyer must NOT receive the seller's forfeited bond.
+    function test_resolveWithForfeit_buyerCannotProfitFromSellerMisconduct()
+        public
+    {
+        _toDisputed();
+
+        uint256 buyerBefore = token.balanceOf(buyer);
+
+        vm.prank(admin);
+        escrow.resolveWithForfeit(ID, 1, keccak256("seller-cheated"));
+
+        // Buyer made whole (principal + buyer bond back).
+        assertEq(
+            token.balanceOf(buyer) - buyerBefore,
+            PRICE + BUYER_BOND,
+            "buyer refunded exactly"
+        );
+        // Strictly less than a windfall including the seller bond.
+        assertLt(
+            token.balanceOf(buyer) - buyerBefore,
+            PRICE + BUYER_BOND + SELLER_BOND,
+            "buyer did not receive the seller bond"
+        );
+        // Treasury received it.
+        assertGe(
+            token.balanceOf(treasury),
+            SELLER_BOND,
+            "treasury received the seller bond"
+        );
+    }
+
+    /// Architecture regression: the seller must NOT receive the buyer's forfeited bond.
+    /// Architecture regression: the seller must NOT receive the buyer's forfeited bond.
+    /// The seller's balance delta is principal - fee + seller bond (their own bond
+    /// coming back), NOT principal - fee + buyer bond (a windfall).
+    function test_resolveWithForfeit_sellerCannotProfitFromBuyerMisconduct()
+        public
+    {
+        _toDisputed();
+
+        uint256 sellerBefore = token.balanceOf(seller);
+
+        vm.prank(admin);
+        escrow.resolveWithForfeit(ID, 2, keccak256("buyer-cheated"));
+
+        // Seller paid the normal completion payout: principal - fee + own bond back.
+        assertEq(
+            token.balanceOf(seller) - sellerBefore,
+            PRICE - FEE + SELLER_BOND,
+            "seller paid as completed (principal - fee + own bond)"
+        );
+        // And strictly less than that plus the buyer's bond — i.e. no windfall.
+        assertLt(
+            token.balanceOf(seller) - sellerBefore,
+            PRICE - FEE + SELLER_BOND + BUYER_BOND,
+            "seller did not receive the buyer bond"
+        );
+        // Treasury received at least the buyer's bond (here: bond + fee).
+        assertGe(
+            token.balanceOf(treasury),
+            BUYER_BOND,
+            "treasury received the buyer bond"
+        );
+        _assertConserved();
+    }
+
+    function test_resolveWithForfeit_onlyArbiter() public {
+        _toDisputed();
+        vm.prank(buyer);
+        vm.expectRevert();
+        escrow.resolveWithForfeit(ID, 1, keccak256("x"));
+
+        vm.prank(seller);
+        vm.expectRevert();
+        escrow.resolveWithForfeit(ID, 1, keccak256("x"));
+
+        vm.prank(stranger);
+        vm.expectRevert();
+        escrow.resolveWithForfeit(ID, 1, keccak256("x"));
+    }
+
+    function test_resolveWithForfeit_wrongState() public {
+        // Trade is SellerBonded, not Disputed.
+        _create(false);
+        vm.prank(admin);
+        vm.expectRevert(PactoraEscrow.InvalidState.selector);
+        escrow.resolveWithForfeit(ID, 1, keccak256("x"));
+    }
+
+    function test_resolveWithForfeit_badParty() public {
+        _toDisputed();
+
+        vm.prank(admin);
+        vm.expectRevert(PactoraEscrow.InvalidParams.selector);
+        escrow.resolveWithForfeit(ID, 0, keccak256("x"));
+
+        vm.prank(admin);
+        vm.expectRevert(PactoraEscrow.InvalidParams.selector);
+        escrow.resolveWithForfeit(ID, 3, keccak256("x"));
+
+        // Still disputed after the reverts.
+        _assertStatus(PactoraEscrow.Status.Disputed);
+    }
+
+    function test_resolveWithForfeit_doubleSettlementReverts() public {
+        _toDisputed();
+        vm.prank(admin);
+        escrow.resolveWithForfeit(ID, 1, keccak256("first"));
+
+        vm.prank(admin);
+        vm.expectRevert(PactoraEscrow.InvalidState.selector);
+        escrow.resolveWithForfeit(ID, 1, keccak256("second"));
+    }
+
+    function test_resolveWithForfeit_emitsEvent() public {
+        _toDisputed();
+        bytes32 decision = keccak256("documented-decision");
+
+        vm.expectEmit(true, false, false, true, address(escrow));
+        emit PactoraEscrow.DisputeResolvedWithForfeit(
+            ID,
+            PRICE + BUYER_BOND, // toBuyer
+            0, // toSeller
+            SELLER_BOND, // toTreasury
+            1, // forfeitingParty = seller
+            decision
+        );
+
+        vm.prank(admin);
+        escrow.resolveWithForfeit(ID, 1, decision);
+    }
+
+    function testFuzz_resolveWithForfeit_conservesFunds(
+        uint8 forfeitingParty
+    ) public {
+        forfeitingParty = uint8(bound(forfeitingParty, 1, 2));
+        _toDisputed();
+
+        uint256 totalBefore = token.balanceOf(buyer) +
+            token.balanceOf(seller) +
+            token.balanceOf(treasury);
+
+        vm.prank(admin);
+        escrow.resolveWithForfeit(ID, forfeitingParty, keccak256("fuzz"));
+
+        uint256 totalAfter = token.balanceOf(buyer) +
+            token.balanceOf(seller) +
+            token.balanceOf(treasury);
+
+        assertEq(totalAfter - totalBefore, TOTAL, "conservation");
         assertEq(token.balanceOf(address(escrow)), 0);
         _assertConserved();
     }

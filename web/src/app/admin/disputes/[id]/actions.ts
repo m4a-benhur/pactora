@@ -4,7 +4,11 @@ import { keccak256, stringToHex } from "viem";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { syncTradeFromChain } from "@/lib/sync";
-import { arbiterResolveForSeller, arbiterResolveRefund } from "@/lib/arbiter";
+import {
+    arbiterResolveForSeller,
+    arbiterResolveRefund,
+    arbiterResolveWithForfeit,
+} from "@/lib/arbiter";
 import { chainTradeId } from "@/lib/chain-ids";
 import { parseZarToCents, zarCentsToUnits } from "@/lib/pricing";
 
@@ -12,9 +16,9 @@ const OUTCOMES = [
     "full_refund",
     "partial_refund",
     "release_to_seller",
-    "seller_bond_to_buyer",
-    "release_buyer_bond_forfeited",
-];
+    "seller_bond_forfeited",    // renamed from seller_bond_to_buyer
+    "buyer_bond_forfeited",     // renamed from release_buyer_bond_forfeited
+] as const;
 
 export async function resolveDispute(input: {
     tradeId: string;
@@ -33,7 +37,7 @@ export async function resolveDispute(input: {
 
         const notes = input.notes.trim();
         if (notes.length < 20) return { error: "Write a reasoned decision (at least 20 characters)." };
-        if (!OUTCOMES.includes(input.outcome)) return { error: "Choose an outcome." };
+        if (!(OUTCOMES as readonly string[]).includes(input.outcome)) return { error: "Choose an outcome." };
 
         const sync = await syncTradeFromChain(input.tradeId);
         if (!sync.ok) return { error: sync.error ?? "Could not verify the trade on-chain." };
@@ -54,8 +58,10 @@ export async function resolveDispute(input: {
         const sBond = BigInt(trade.seller_bond_units);
         const bBond = BigInt(trade.buyer_bond_units ?? 0);
 
-        let buyerAmount: bigint | null = null;
-        let sellerRuling: { forfeit: boolean } | null = null;
+        // Which contract call, and with what arguments.
+        let buyerAmount: bigint | null = null;        // -> resolveRefund
+        let sellerForfeit: boolean | null = null;     // -> resolveForSeller
+        let forfeitingParty: 1 | 2 | null = null;     // -> resolveWithForfeit
 
         switch (input.outcome) {
             case "full_refund":
@@ -71,14 +77,14 @@ export async function resolveDispute(input: {
                 buyerAmount = units + bBond;
                 break;
             }
-            case "seller_bond_to_buyer":
-                buyerAmount = principal + sBond + bBond;
-                break;
             case "release_to_seller":
-                sellerRuling = { forfeit: false };
+                sellerForfeit = false;      // no misconduct: bond returned, fee applies
                 break;
-            case "release_buyer_bond_forfeited":
-                sellerRuling = { forfeit: true };
+            case "seller_bond_forfeited":
+                forfeitingParty = 1;        // seller bond -> treasury
+                break;
+            case "buyer_bond_forfeited":
+                forfeitingParty = 2;        // buyer bond + fee -> treasury
                 break;
         }
 
@@ -88,7 +94,8 @@ export async function resolveDispute(input: {
                     tradeId: trade.id,
                     outcome: input.outcome,
                     buyerAmount: buyerAmount === null ? null : buyerAmount.toString(),
-                    forfeit: sellerRuling?.forfeit ?? null,
+                    forfeit: sellerForfeit,
+                    forfeitingParty,
                     notes,
                     decidedBy: user.id,
                 })
@@ -98,7 +105,9 @@ export async function resolveDispute(input: {
         const txHash =
             buyerAmount !== null
                 ? await arbiterResolveRefund(id, buyerAmount, decisionHash)
-                : await arbiterResolveForSeller(id, sellerRuling!.forfeit, decisionHash);
+                : sellerForfeit !== null
+                    ? await arbiterResolveForSeller(id, sellerForfeit, decisionHash)
+                    : await arbiterResolveWithForfeit(id, forfeitingParty!, decisionHash);
 
         await admin
             .from("disputes")
@@ -118,7 +127,12 @@ export async function resolveDispute(input: {
             action: "dispute_resolved",
             entity: "trade",
             entity_id: trade.id,
-            details: { outcome: input.outcome, decision_hash: decisionHash, tx_hash: txHash },
+            details: {
+                outcome: input.outcome,
+                decision_hash: decisionHash,
+                tx_hash: txHash,
+                forfeiting_party: forfeitingParty,
+            },
         });
 
         await syncTradeFromChain(trade.id, txHash);

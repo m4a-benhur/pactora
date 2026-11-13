@@ -50,8 +50,8 @@ export const OUTCOME_LABEL: Record<string, string> = {
     full_refund: "Full refund to the buyer",
     partial_refund: "Partial refund to the buyer",
     release_to_seller: "Payment released to the seller",
-    release_buyer_bond_forfeited: "Released to the seller; buyer bond forfeited for deliberate misconduct",
-    seller_bond_to_buyer: "Refund to the buyer; seller bond awarded to the buyer for deliberate misconduct",
+    seller_bond_forfeited: "Seller misconduct: buyer refunded, seller bond forfeited to Pactora",
+    buyer_bond_forfeited: "Buyer misconduct: seller paid, buyer bond forfeited to Pactora",
 };
 
 export type SellerStats = {

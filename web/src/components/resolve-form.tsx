@@ -24,9 +24,9 @@ type Props = {
 const OUTCOMES = [
     { v: "full_refund", label: "Full refund to the buyer (no misconduct finding)" },
     { v: "partial_refund", label: "Partial refund to the buyer (e.g. undisclosed fault, item kept)" },
-    { v: "release_to_seller", label: "Release payment to the seller (claim not upheld)" },
-    { v: "seller_bond_to_buyer", label: "Refund buyer + award seller bond (deliberate seller misconduct)" },
-    { v: "release_buyer_bond_forfeited", label: "Release to seller + forfeit buyer bond (deliberate buyer misconduct)" },
+    { v: "release_to_seller", label: "Release payment to the seller (claim not upheld, no misconduct)" },
+    { v: "seller_bond_forfeited", label: "Seller misconduct: refund buyer + forfeit seller bond to Pactora" },
+    { v: "buyer_bond_forfeited", label: "Buyer misconduct: pay seller + forfeit buyer bond to Pactora" },
 ];
 
 const area =
@@ -49,7 +49,7 @@ export function ResolveForm(p: Props) {
 
     let buyer = 0n;
     let seller = 0n;
-    let treasury = 0n;
+    let pactora = 0n;
     let previewError: string | null = null;
 
     if (outcome === "full_refund") {
@@ -64,15 +64,19 @@ export function ResolveForm(p: Props) {
             buyer = units + bBond;
             seller = principal - units + sBond;
         }
-    } else if (outcome === "seller_bond_to_buyer") {
-        buyer = principal + sBond + bBond;
+    } else if (outcome === "seller_bond_forfeited") {
+        buyer = principal + bBond;   // refunded in full
+        seller = 0n;                 // bond seized
+        pactora = sBond;             // bond -> Pactora
     } else if (outcome === "release_to_seller") {
         seller = principal - fee + sBond;
         buyer = bBond;
-        treasury = fee;
+        pactora = fee;
     } else {
-        seller = principal - fee + sBond + bBond;
-        treasury = fee;
+        // buyer_bond_forfeited
+        seller = principal - fee + sBond;
+        buyer = 0n;
+        pactora = bBond + fee;       // bond + fee -> Pactora
     }
 
     async function submit() {
@@ -97,8 +101,9 @@ export function ResolveForm(p: Props) {
     return (
         <div className="space-y-4 text-sm">
             <p className="rounded border border-amber-300 bg-amber-50 p-2 text-amber-900">
-                An accusation is not proof, and a dispute raised in good faith must never be penalised. Choose a
-                bond penalty only for deliberate misconduct, and explain why in the reasoning below.
+                An accusation is not proof, and a dispute raised in good faith must never be penalised. A
+                bond penalty means the forfeited bond goes to Pactora — never to the other party — so
+                neither side can profit from a false accusation. Explain your reasoning below.
             </p>
 
             <div className="space-y-2">
@@ -125,7 +130,7 @@ export function ResolveForm(p: Props) {
                     <>
                         <p>Buyer receives: {zar(buyer)}</p>
                         <p>Seller receives: {zar(seller)}</p>
-                        <p>Pactora fee: {zar(treasury)}</p>
+                        <p className="font-medium">Pactora receives: {zar(pactora)}</p>
                     </>
                 )}
             </div>

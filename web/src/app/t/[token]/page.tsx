@@ -60,10 +60,11 @@ async function BuyerContent({ params }: { params: Promise<{ token: string }> }) 
                     {STATUS_LABEL[t.status] ?? t.status}
                 </p>
                 <h1 className="text-2xl font-bold">{t.title}</h1>
-                <p className="text-muted-foreground">
-                    <p className="text-sm font-medium">{reputationLine(stats as SellerStats | null)}</p>
-                    {t.category} · {t.condition.replace("_", " ")} · Seller: {t.seller_name}
-                </p>
+<h1 className="text-2xl font-bold">{t.title}</h1>
+<p className="text-muted-foreground">
+    {t.category} · {t.condition.replace("_", " ")} · Seller: {t.seller_name}
+</p>
+<p className="text-sm font-medium">{reputationLine(stats as SellerStats | null)}</p>
             </div>
 
             {photos.length > 0 && (

@@ -117,6 +117,8 @@ async function TradeContent({ params }: { params: Promise<{ id: string }> }) {
 
     const completed = events?.find((e) => e.event_name === "TradeCompleted");
     const refunded = events?.find((e) => e.event_name === "DisputeResolvedRefund");
+    const forfeit = events?.find((e) => e.event_name === "DisputeResolvedWithForfeit");
+
     const inProgress = ["dispatched", "delivered", "disputed"].includes(trade.status);
 
     return (
@@ -146,26 +148,29 @@ async function TradeContent({ params }: { params: Promise<{ id: string }> }) {
                 </Card>
             )}
 
-            {trade.status === "resolved" && refunded && (
+            {(trade.status === "resolved" || trade.status === "completed") && (refunded || forfeit) && (
                 <Card>
                     <CardHeader>
-                        <CardTitle>Resolved by review. No fee charged.</CardTitle>
+                        <CardTitle>
+                            {trade.status === "resolved" ? "Resolved by review. No fee charged." : "Resolved by review."}
+                        </CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-1 text-sm">
-                        <p>Buyer received: {zar(BigInt(refunded.data.buyerAmount))}</p>
-                        <p>Seller received: {zar(BigInt(refunded.data.sellerAmount))}</p>
-                    </CardContent>
-                </Card>
-            )}
-
-            {dispute?.status === "resolved" && (
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Reviewer&apos;s decision</CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-1 text-sm">
-                        <p className="font-medium">{OUTCOME_LABEL[dispute.outcome ?? ""] ?? dispute.outcome}</p>
-                        <p className="whitespace-pre-wrap">{dispute.admin_notes}</p>
+                        {refunded && (
+                            <>
+                                <p>Buyer received: {zar(BigInt(refunded.data.buyerAmount))}</p>
+                                <p>Seller received: {zar(BigInt(refunded.data.sellerAmount))}</p>
+                            </>
+                        )}
+                        {forfeit && (
+                            <>
+                                <p>Buyer received: {zar(BigInt(forfeit.data.toBuyer))}</p>
+                                <p>Seller received: {zar(BigInt(forfeit.data.toSeller))}</p>
+                                <p className="font-medium">
+                                    Forfeited bond to Pactora: {zar(BigInt(forfeit.data.toTreasury))}
+                                </p>
+                            </>
+                        )}
                     </CardContent>
                 </Card>
             )}

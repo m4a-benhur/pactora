@@ -106,6 +106,14 @@ contract PactoraEscrow is AccessControl, ReentrancyGuard {
         uint256 sellerAmount,
         bytes32 decisionHash
     );
+    event DisputeResolvedWithForfeit(
+        bytes32 indexed id,
+        uint256 toBuyer,
+        uint256 toSeller,
+        uint256 toTreasury,
+        uint8 forfeitingParty,
+        bytes32 decisionHash
+    );
     event TradeCancelled(
         bytes32 indexed id,
         uint256 buyerRefund,
@@ -304,6 +312,56 @@ contract PactoraEscrow is AccessControl, ReentrancyGuard {
         if (t.status != Status.Disputed) revert InvalidState();
         decisionHash; // recorded off-chain; kept in the signature for the audit trail
         _completeWith(id, t, forfeitBuyerBond, true);
+    }
+
+    /// @notice Misconduct ruling: one party's bond is forfeited to the Pactora treasury.
+    ///         The innocent party's bond is always returned. No fee on a seller-misconduct
+    ///         refund; the normal 2% fee applies on a buyer-misconduct seller payout.
+    /// @param forfeitingParty 1 = seller bond forfeited, 2 = buyer bond forfeited.
+    function resolveWithForfeit(
+        bytes32 id,
+        uint8 forfeitingParty,
+        bytes32 decisionHash
+    ) external onlyRole(ARBITER_ROLE) nonReentrant {
+        Trade storage t = trades[id];
+        if (t.status != Status.Disputed) revert InvalidState();
+        if (forfeitingParty != 1 && forfeitingParty != 2)
+            revert InvalidParams();
+
+        uint256 toBuyer;
+        uint256 toSeller;
+        uint256 toTreasury;
+
+        if (forfeitingParty == 1) {
+            // Seller misconduct: buyer refunded in full, seller bond seized.
+            toBuyer = t.principal + t.buyerBond;
+            toSeller = 0;
+            toTreasury = t.sellerBond;
+        } else {
+            // Buyer misconduct: seller paid as if completed (fee applies), buyer bond seized.
+            uint256 fee = (t.principal * t.feeBps) / BPS;
+            toSeller = t.principal - fee + t.sellerBond;
+            toBuyer = 0;
+            toTreasury = t.buyerBond + fee;
+        }
+
+        uint256 held = t.principal + t.sellerBond + t.buyerBond;
+        if (toBuyer + toSeller + toTreasury != held) revert AmountExceedsHeld();
+
+        t.status = Status.Resolved;
+
+        _send(t.buyer, toBuyer);
+        _send(t.seller, toSeller);
+        _send(treasury, toTreasury);
+
+        emit DisputeResolvedWithForfeit(
+            id,
+            toBuyer,
+            toSeller,
+            toTreasury,
+            forfeitingParty,
+            decisionHash
+        );
     }
 
     // ---------------------------------------------------------------- timeouts

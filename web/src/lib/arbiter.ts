@@ -60,3 +60,18 @@ export async function arbiterResolveForSeller(
     });
     return finish(hash, "The seller ruling");
 }
+
+/** Misconduct ruling: one party's bond is forfeited to the Pactora treasury. */
+export async function arbiterResolveWithForfeit(
+    id: `0x${string}`,
+    forfeitingParty: 1 | 2,
+    decisionHash: `0x${string}`
+) {
+    const hash = await arbiterWallet().writeContract({
+        address: ESCROW_ADDRESS,
+        abi: escrowAbi,
+        functionName: "resolveWithForfeit",
+        args: [id, forfeitingParty, decisionHash],
+    });
+    return finish(hash, "The misconduct ruling");
+}
