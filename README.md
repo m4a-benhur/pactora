@@ -6,6 +6,13 @@ Pactora is escrow for social commerce in South Africa. A buyer's money is held s
 
 > **DEMO — NO REAL MONEY.** Everything runs on a test network. See [Honest scope](#honest-scope).
 
+| | |
+|---|---|
+| **Live app** | `https://pactora-gray.vercel.app/` |
+| **Demo video (under 3 min)** | `https://youtu.be/yEsMGK2-vRw` |
+| **Track** | Tether-sponsored |
+| **Network** | Ethereum Sepolia (chain ID 11155111) |
+
 ## The problem
 
 Millions of deals happen every day on Facebook Marketplace, WhatsApp and Instagram, and they run on blind trust. Buyers pay first and hope the item arrives. Sellers ship first and hope they get paid. When something goes wrong, neither side has recourse.
@@ -148,5 +155,4 @@ Full list, including the treasury conflict-of-interest note: [`docs/LIMITATIONS.
 ## Team
 
 Built by Benhur Mwamba.
-
 
