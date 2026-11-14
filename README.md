@@ -9,7 +9,7 @@ Pactora is escrow for social commerce in South Africa. A buyer's money is held s
 | | |
 |---|---|
 | **Live app** | [Link](https://pactora-gray.vercel.app/) |
-| **Demo video (under 3 min)** | [Link](https://youtu.be/yEsMGK2-vRw) |
+| **Demo video** | [Link](https://youtu.be/yEsMGK2-vRw) |
 | **Track** | Tether-sponsored |
 | **Network** | Ethereum Sepolia (chain ID 11155111) |
 
