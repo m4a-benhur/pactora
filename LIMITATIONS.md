@@ -11,7 +11,6 @@ Pactora is a hackathon MVP running on the Ethereum Sepolia test network. This do
 | ZAR on and off-ramps | Simulated |
 | Settlement token | Our own test token, not Tether USDT |
 | Dispute governance | One admin, no appeals |
-| Wallet recovery on a new device | **Not built** |
 | Identity verification | Not built |
 | Legal and regulatory review | Not done |
 
