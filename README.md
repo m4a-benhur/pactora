@@ -140,7 +140,7 @@ Pactora is a hackathon MVP. These parts are deliberately simulated or simplified
 - **One administrator acts as arbiter.** There are no appeals, and no identity verification.
 - **Wallet custody is demo-grade.**
 
-Full list, including the treasury conflict-of-interest note: [`docs/LIMITATIONS.md`](docs/LIMITATIONS.md).
+Full list, including the treasury conflict-of-interest note: [`LIMITATIONS.md`](LIMITATIONS.md).
 
 ## Roadmap
 
