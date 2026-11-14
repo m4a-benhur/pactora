@@ -36,7 +36,7 @@ Millions of deals happen every day on Facebook Marketplace, WhatsApp and Instagr
 1. Open the live app and sign up. Email confirmation is off for the demo.
 2. On the dashboard, create your wallet (PIN-protected, stored in your browser) and link it to your account.
 3. Get a little Sepolia ETH for network fees from any public Sepolia faucet, then claim test tUSDT from the wallet panel or buy some at **Funds**.
-4. Use two accounts (two browsers or one private window) to play seller and buyer, and follow [`docs/TEST_CHECKLIST.md`](docs/TEST_CHECKLIST.md).
+4. Use two accounts (two browsers or one private window) to play seller and buyer.
 5. Admin features (dispute review, platform overview) need an admin account: `<ADD JUDGE ADMIN LOGIN OR NOTE>`.
 
 ## How the escrow works
@@ -85,7 +85,7 @@ stateDiagram-v2
 | `PactoraEscrow.sol` | Bonds, funding, delivery, disputes, fee and payouts. |
 
 - Escrow (Sepolia): `0x91D4d1537F104e5Eb09161483BE5313A42931d9B` ([Etherscan](https://sepolia.etherscan.io/address/0x91D4d1537F104e5Eb09161483BE5313A42931d9B))
-- tUSDT (Sepolia): `<ADD ADDRESS>`
+- tUSDT (Sepolia): `0xA73E913adB5821B36a24dAe6822B58D33808D2f4`
 
 ## Security design
 
@@ -120,8 +120,6 @@ npm install
 npm test
 npm run dev
 ```
-
-Deployment steps are in [`docs/DEPLOY.md`](docs/DEPLOY.md).
 
 ## Repository layout
 
