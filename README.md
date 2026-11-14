@@ -4,12 +4,12 @@
 
 Pactora is escrow for social commerce in South Africa. A buyer's money is held safely until the item arrives as promised. Both sides put down a small refundable bond, so cheating costs more than honesty. Users see rand. Settlement happens on Ethereum Sepolia with a USDT-style test token and wallets built on Tether's WDK.
 
-> **DEMO — NO REAL MONEY.** Everything runs on a test network. See [Honest scope](#honest-scope).
+> Everything runs on a test network. 
 
 | | |
 |---|---|
-| **Live app** | `https://pactora-gray.vercel.app/` |
-| **Demo video (under 3 min)** | `https://youtu.be/yEsMGK2-vRw` |
+| **Live app** | [Link](https://pactora-gray.vercel.app/) |
+| **Demo video (under 3 min)** | [Link](https://youtu.be/yEsMGK2-vRw) |
 | **Track** | Tether-sponsored |
 | **Network** | Ethereum Sepolia (chain ID 11155111) |
 
