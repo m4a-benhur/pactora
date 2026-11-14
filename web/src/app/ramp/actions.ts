@@ -1,7 +1,6 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-// ADAPT if your helper names differ (see INTEGRATION.md).
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
@@ -14,6 +13,12 @@ type Result = { ok: true; id: string } | { ok: false; error: string };
 
 // Fixed demo settings. Wire to platform_settings if you want admin-editable rates.
 const SETTINGS = { rate: DEFAULT_RATE, onFeeBps: DEFAULT_ON_FEE_BPS, offFeeBps: DEFAULT_OFF_FEE_BPS };
+
+/** In development show the real database message; in production keep it generic. */
+function dbError(label: string, message: string | undefined, error: unknown): string {
+  console.error(label, error);
+  return process.env.NODE_ENV === "development" && message ? `${label}: ${message}` : `${label}. Try again.`;
+}
 
 async function currentUser() {
   const supabase = await createClient();
@@ -29,19 +34,36 @@ async function ownedRamp(id: string, userId: string) {
   return { admin, ramp: data };
 }
 
+/* ------------------------------------------------------------------ */
+/* ON-RAMP: buy tUSDT with (simulated) rand                            */
+/* ------------------------------------------------------------------ */
+
 export async function createOnRamp(zarInput: string): Promise<Result> {
   const u = await currentUser();
   if (!u) return { ok: false, error: "Log in to buy tUSDT." };
   if (!u.wallet) return { ok: false, error: "Link your wallet on the dashboard first." };
+
   const cents = parseZarToCents(zarInput);
   const bad = validateOnAmount(cents);
   if (bad || cents === null) return { ok: false, error: bad ?? "Invalid amount." };
+
   const q = quoteOnRamp(cents, SETTINGS.rate, SETTINGS.onFeeBps);
   const { data, error } = await createAdminClient().from("ramp_transactions").insert({
-    user_id: u.id, kind: "on", status: "initiated", zar_cents: q.zarCents, fee_cents: q.feeCents,
-    rate: SETTINGS.rate, fee_bps: SETTINGS.onFeeBps, usdt_units: q.units.toString(), wallet_address: u.wallet,
+    user_id: u.id,
+    kind: "on",
+    type: "onramp",                              // original column, check: onramp | offramp
+    reference: `ON-${crypto.randomUUID()}`,      // original column, UNIQUE
+    status: "initiated",
+    zar_cents: q.zarCents,
+    fee_cents: q.feeCents,
+    rate: SETTINGS.rate,
+    rate_cents_per_usdt: SETTINGS.rate,          // original column, NOT NULL
+    fee_bps: SETTINGS.onFeeBps,
+    usdt_units: q.units.toString(),
+    wallet_address: u.wallet,
   }).select("id").single();
-  if (error || !data) return { ok: false, error: "Could not start the purchase. Try again." };
+
+  if (error || !data) return { ok: false, error: dbError("Could not start the purchase", error?.message, error) };
   return { ok: true, id: data.id as string };
 }
 
@@ -51,11 +73,13 @@ export async function confirmOnRamp(id: string): Promise<Result> {
   if (!u) return { ok: false, error: "Log in first." };
   const { admin, ramp } = await ownedRamp(id, u.id);
   if (!ramp || ramp.kind !== "on") return { ok: false, error: "Purchase not found." };
+
   // Atomic claim: only one request can move initiated -> processing.
   const { data: claimed } = await admin.from("ramp_transactions")
     .update({ status: "processing", updated_at: new Date().toISOString() })
     .eq("id", id).eq("status", "initiated").select("id");
   if (!claimed?.length) return { ok: false, error: "This purchase was already processed." };
+
   try {
     const hash = await mintTUsdt(ramp.wallet_address, BigInt(ramp.usdt_units), id);
     await admin.from("ramp_transactions").update({
@@ -77,6 +101,7 @@ export async function failOnRamp(id: string): Promise<Result> {
   if (!u) return { ok: false, error: "Log in first." };
   const { admin, ramp } = await ownedRamp(id, u.id);
   if (!ramp || ramp.kind !== "on") return { ok: false, error: "Purchase not found." };
+
   const { data } = await admin.from("ramp_transactions")
     .update({ status: "failed", failure_reason: "Simulated payment declined", updated_at: new Date().toISOString() })
     .eq("id", id).eq("status", "initiated").select("id");
@@ -85,25 +110,47 @@ export async function failOnRamp(id: string): Promise<Result> {
   return { ok: true, id };
 }
 
+/* ------------------------------------------------------------------ */
+/* OFF-RAMP: cash out tUSDT to (simulated, fictional) bank details     */
+/* ------------------------------------------------------------------ */
+
 export async function createOffRamp(input: {
   units: string; holder: string; bank: string; account: string; branch: string;
 }): Promise<Result> {
   const u = await currentUser();
   if (!u) return { ok: false, error: "Log in to cash out." };
   if (!u.wallet) return { ok: false, error: "Link your wallet on the dashboard first." };
+
   const units = parseUnits(input.units);
   const balance = await tUsdtBalance(u.wallet);
   const badAmount = validateOffAmount(units, balance);
   if (badAmount || units === null) return { ok: false, error: badAmount ?? "Invalid amount." };
+
   const badBank = validateBank(input);
   if (badBank) return { ok: false, error: badBank };
+
   const q = quoteOffRamp(units, SETTINGS.rate, SETTINGS.offFeeBps);
+  const last4 = input.account.trim().slice(-4);
   const { data, error } = await createAdminClient().from("ramp_transactions").insert({
-    user_id: u.id, kind: "off", status: "initiated", zar_cents: q.payoutCents, fee_cents: q.feeCents,
-    rate: SETTINGS.rate, fee_bps: SETTINGS.offFeeBps, usdt_units: q.units.toString(), wallet_address: u.wallet,
-    bank_name: input.bank.trim(), account_holder: input.holder.trim(), account_last4: input.account.trim().slice(-4),
+    user_id: u.id,
+    kind: "off",
+    type: "offramp",                             // original column, check: onramp | offramp
+    reference: `OFF-${crypto.randomUUID()}`,     // original column, UNIQUE
+    status: "initiated",
+    zar_cents: q.payoutCents,
+    fee_cents: q.feeCents,
+    rate: SETTINGS.rate,
+    rate_cents_per_usdt: SETTINGS.rate,          // original column, NOT NULL
+    fee_bps: SETTINGS.offFeeBps,
+    usdt_units: q.units.toString(),
+    wallet_address: u.wallet,
+    bank_name: input.bank.trim(),
+    account_holder: input.holder.trim(),
+    account_last4: last4,
+    bank_last4: last4,                           // original column, check: exactly 4 digits
   }).select("id").single();
-  if (error || !data) return { ok: false, error: "Could not start the withdrawal. Try again." };
+
+  if (error || !data) return { ok: false, error: dbError("Could not start the withdrawal", error?.message, error) };
   return { ok: true, id: data.id as string };
 }
 
@@ -113,9 +160,11 @@ export async function advanceOffRamp(id: string, outcome: "next" | "fail"): Prom
   if (!u) return { ok: false, error: "Log in first." };
   const { admin, ramp } = await ownedRamp(id, u.id);
   if (!ramp || ramp.kind !== "off") return { ok: false, error: "Withdrawal not found." };
+
   const now = new Date().toISOString();
+  const from = ramp.status as string;
   let patch: Record<string, unknown> | null = null;
-  let from = ramp.status as string;
+
   if (outcome === "fail" && (from === "initiated" || from === "processing")) {
     patch = { status: "failed", failure_reason: "Simulated bank rejection", updated_at: now };
   } else if (from === "initiated") {
@@ -124,6 +173,7 @@ export async function advanceOffRamp(id: string, outcome: "next" | "fail"): Prom
     patch = { status: "completed", receipt_no: newReceiptNo(), completed_at: now, updated_at: now };
   }
   if (!patch) return { ok: false, error: "This withdrawal can no longer be changed." };
+
   const { data } = await admin.from("ramp_transactions").update(patch).eq("id", id).eq("status", from).select("id");
   if (!data?.length) return { ok: false, error: "The status changed. Refresh and try again." };
   revalidatePath("/ramp"); revalidatePath(`/ramp/${id}`);
